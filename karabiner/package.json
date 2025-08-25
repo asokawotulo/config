@@ -1,0 +1,13 @@
+{
+  "name": "karabiner-config",
+  "description": "karabiner config in karabiner.ts",
+  "scripts": {
+    "build": "bun index.ts",
+    "update": "npm update karabiner.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.1.3",
+    "karabiner.ts": "latest",
+    "typescript": "^5.0.4"
+  }
+}

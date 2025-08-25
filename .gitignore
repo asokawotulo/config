@@ -1,0 +1,8 @@
+# Backup directory for existing configs
+backup/
+
+# macOS files
+.DS_Store
+
+# Node modules
+node_modules/
