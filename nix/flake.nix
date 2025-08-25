@@ -92,28 +92,33 @@
       ];
 
       # Configure homebrew packages.
-      homebrew.enable = true;
-      homebrew.casks = [
-        "1password"
-        "adguard"
-        "appcleaner"
-        "cursor"
-        "discord"
-        "google-chrome"
-        "google-drive"
-        "imageoptim"
-        "karabiner-elements"
-        "obsidian"
-        "orbstack"
-        "orcaslicer"
-        "postman"
-        "raycast"
-        "spotify"
-        "steam"
-        "vlc"
-        "warp"
-        "zoom"
-      ];
+      homebrew = {
+        enable = true;
+        brews = [
+          "sst/tap/opencode"
+        ];
+        casks = [
+          "1password"
+          "adguard"
+          "appcleaner"
+          "cursor"
+          "discord"
+          "google-chrome"
+          "google-drive"
+          "imageoptim"
+          "karabiner-elements"
+          "obsidian"
+          "orbstack"
+          "orcaslicer"
+          "postman"
+          "raycast"
+          "spotify"
+          "steam"
+          "vlc"
+          "warp"
+          "zoom"
+        ];
+      };
 
       # TODO: Add Mac App Store apps.
     };
