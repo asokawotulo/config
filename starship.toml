@@ -1,0 +1,105 @@
+# Get editor completions based on the config schema
+"$schema" = "https://starship.rs/config-schema.json"
+
+# Inserts a blank line between shell prompts
+add_newline = true
+
+format = """
+$username\
+$directory\
+$direnv\
+$hostname\
+$git_branch\
+$git_status\
+
+$conda\
+$aws\
+$terraform\
+
+$nodejs\
+$bun\
+
+$php\
+$golang\
+$rust\
+$zig\
+
+$time\
+$cmd_duration\
+
+$line_break\
+$character
+"""
+
+# right_format = """
+# $time
+# """
+
+[character]
+success_symbol = "[➜](bold green)"
+error_symbol = "[➜](bold red)"
+
+[username]
+show_always = true
+
+[direnv]
+disabled = false
+format = "[$symbol($loaded)]($style) "
+symbol = "direnv:"
+
+# TODO: Find a better way to manage AWS profiles
+[aws]
+format = "[$symbol($profile)]($style) "
+symbol = "aws:"
+
+[terraform]
+format = "[$symbol($workspace)]($style) "
+symbol = "terraform:"
+version_format = "${raw}"
+
+[directory]
+truncation_length = 1
+read_only = ""
+
+[git_branch]
+symbol = ""
+
+[conda]
+format = "[conda:$environment]($style) "
+
+[nodejs]
+format = "[node:$version]($style) "
+version_format = "${raw}"
+
+[bun]
+format = "[bun:$version]($style) "
+version_format = "${raw}"
+style = "bold white"
+
+[custom.pnpm]
+command = "pnpm -v"
+detect_files = ["package.json", "pnpm-lock.yaml"]
+format = "[pnpm:$output]($style) "
+style = "bold yellow"
+
+[php]
+format = "[php:$version]($style) "
+version_format = "${raw}"
+style = "bold blue"
+
+[golang]
+format = "[go:$version]($style) "
+version_format = "${raw}"
+
+[rust]
+format = "[rust:$version]($style) "
+version_format = "${raw}"
+
+[zig]
+format = "[zig:$version]($style) "
+version_format = "${raw}"
+
+[time]
+disabled = false
+use_12hr = false
+time_format = "%I:%M"

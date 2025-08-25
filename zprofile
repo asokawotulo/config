@@ -1,0 +1,30 @@
+# Shell Config
+export SHELL_SESSION_DISABLE=1
+
+# AWS CLI
+export AWS_PROFILE="default"
+export SHOW_AWS_PROMPT="false"
+
+# Homebrew
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+# Conda
+eval "$(conda "shell.$(basename "${SHELL}")" hook)"
+
+# SSH Agent
+if [ -z "$SSH_AUTH_SOCK" ]; then
+   # Check for a currently running instance of the agent
+   RUNNING_AGENT="`ps -ax | grep 'ssh-agent -s' | grep -v grep | wc -l | tr -d '[:space:]'`"
+   if [ "$RUNNING_AGENT" = "0" ]; then
+        # Launch a new instance of the agent
+        ssh-agent -s &> $HOME/.ssh/ssh-agent
+   fi
+   eval `cat $HOME/.ssh/ssh-agent`
+fi
+
+# Language
+export LANG="en_US.UTF-8"
+export LC_ALL="POSIX"
+# Added by OrbStack: command-line tools and integration
+# This won't be added again if you remove it.
+source ~/.orbstack/shell/init.zsh 2>/dev/null || :
