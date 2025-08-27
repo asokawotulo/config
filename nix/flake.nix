@@ -19,13 +19,14 @@
     configuration = { pkgs, ... }: {
       # User
       users.users.asoka.home = "/Users/asoka";
+      users.users.trilogy.home = "/Users/trilogy";
       # nix.configureBuildUsers = true;
       # nix.useDaemon = true;
       # services.nix-daemon.enable = true;
 
       # Nix configurations.
       nix.settings.experimental-features = "nix-command flakes";
-      nix.settings.trusted-users = [ "root" "asoka" ];
+      nix.settings.trusted-users = [ "root" "asoka" "trilogy" ];
 
       # The platform the configuration will be used on.
       nixpkgs.hostPlatform = "aarch64-darwin";
@@ -49,13 +50,17 @@
           pkgs.mysql84
           pkgs.nodejs_22
           pkgs.bun
+          pkgs.pnpm
           pkgs.php81
           pkgs.go
           # TODO: Add packages from homebrew that are available in nixpkgs.
         ];
 
       # Create /etc/zshrc that loads the nix-darwin environment.
-      programs.zsh.enable = true;
+      programs.zsh = {
+        enable = true;
+        enableCompletion = false;
+      };
 
       # Set Git commit hash for darwin-version.
       system.configurationRevision = self.rev or self.dirtyRev or null;
@@ -63,22 +68,6 @@
 
       # Configure system preferences.
       system.primaryUser = "asoka";
-      system.defaults = {
-        NSGlobalDomain."com.apple.swipescrolldirection" = false;
-
-        WindowManager.EnableStandardClickToShowDesktop = false;
-
-        finder.AppleShowAllFiles = true;
-        finder.AppleShowAllExtensions = true;
-        finder.ShowPathbar = true;
-        finder.ShowStatusBar = true;
-
-        dock.minimize-to-application = true;
-        dock.mru-spaces = false;
-        dock.show-recents = false;
-        dock.persistent-others = [];
-        dock.tilesize = 45;
-      };
 
       security.pam.services.sudo_local = {
         enable = true;
@@ -131,7 +120,8 @@
         home-manager.darwinModules.home-manager {
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
-          home-manager.users.asoka = import ./home.nix;
+          home-manager.users.asoka = import ./home-asoka.nix;
+          home-manager.users.trilogy = import ./home-trilogy.nix;
         }
       ];
     };

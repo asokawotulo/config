@@ -8,4 +8,6 @@
   home.packages = [];
 
   programs.home-manager.enable = true;
+
+  targets.darwin.defaults = import ./darwin-configuration.nix;
 }
