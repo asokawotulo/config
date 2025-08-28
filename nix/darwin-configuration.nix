@@ -11,7 +11,6 @@
     mineffect = "scale";
     minimize-to-application = true;
     mru-spaces = false;
-    expose-group-apps = true;
   };
 
   "com.apple.finder" = {
