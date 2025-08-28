@@ -15,13 +15,13 @@ backup_and_link() {
     local source="$1"
     local target="$2"
     local backup_name="$(basename "$target")"
-    
+
     if [ -e "$target" ] || [ -L "$target" ]; then
         echo "Backing up existing $target to $BACKUP_DIR/$backup_name"
         cp -rf "$target" "$BACKUP_DIR/$backup_name" 2>/dev/null || true
         rm -rf "$target"
     fi
-    
+
     echo "Linking $source -> $target"
     ln -sf "$source" "$target"
 }
@@ -34,7 +34,7 @@ backup_and_link "$CONFIG_DIR/zprofile" "$HOME/.zprofile"
 mkdir -p "$HOME/.config"
 backup_and_link "$CONFIG_DIR/starship.toml" "$HOME/.config/starship.toml"
 
-# Symlink nix configuration directory  
+# Symlink nix configuration directory
 backup_and_link "$CONFIG_DIR/nix" "$HOME/.config/nix"
 
 # Build karabiner configuration
@@ -57,6 +57,10 @@ fi
 echo "Running nix-darwin switch..."
 cd "$CONFIG_DIR/nix"
 sudo nix run nix-darwin -- switch --flake .#setup
+
+# Symlink warp configuration
+mkdir -p "$HOME/.warp/themes"
+backup_and_link "$CONFIG_DIR/warp/monokai.yaml" "$HOME/.warp/themes/monokai.yaml"
 
 echo "Development environment setup complete!"
 echo "Backup of previous configs saved to: $BACKUP_DIR"
