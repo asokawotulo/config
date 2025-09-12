@@ -55,3 +55,11 @@ alias speed="speedtest -u auto-decimal-bytes"
 alias switch="darwin-rebuild switch --flake ~/config/nix#setup"
 alias update="brew update && omz update && nix flake update"
 alias upgrade="brew upgrade && brew cleanup && switch && nix-collect-garbage -d"
+
+# pnpm
+export PNPM_HOME="$HOME/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
