@@ -84,7 +84,7 @@
       homebrew = {
         enable = true;
         brews = [
-          "sst/tap/opencode"
+          "opencode"
         ];
         casks = [
           "1password"
