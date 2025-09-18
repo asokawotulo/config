@@ -33,6 +33,14 @@ else
     echo "Oh My Zsh is already installed, skipping installation..."
 fi
 
+# Install Brew
+echo "Installing Brew..."
+if ! command -v brew &> /dev/null; then
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+else
+    echo "Brew is already installed, skipping installation..."
+fi
+
 # Symlink git configuration files
 backup_and_link "$CONFIG_DIR/git/gitconfig" "$HOME/.gitconfig"
 backup_and_link "$CONFIG_DIR/git/gitignore" "$HOME/.gitignore"
