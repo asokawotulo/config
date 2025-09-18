@@ -4,19 +4,19 @@
 
 [core]
 	excludesfile = ~/.gitignore
-	editor = cursor
+	editor = code --wait
 
 [diff]
-	tool = cursor
+	tool = code
 
 [difftool]
-	cursor = cursor --wait --diff
+	code = code --wait --diff
 
 [merge]
-	tool = cursor
+	tool = code
 
 [mergetool]
-	cursor = cursor --wait --merge
+	code = code --wait
 
 [pull]
 	rebase = true
