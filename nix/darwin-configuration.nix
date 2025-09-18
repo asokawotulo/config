@@ -51,7 +51,9 @@
     EnableStandardClickToShowDesktop = false;
   };
 
-  "com.apple.AppleMultiouchTrackpad" = {
+  "com.apple.AppleMultitouchTrackpad" = {
     Clicking = true;
+    TrackpadThreeFingerHorizSwipeGesture = 1;
+    TrackpadThreeFingerVertSwipeGesture = 1;
   };
 }
