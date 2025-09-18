@@ -34,6 +34,10 @@ backup_and_link "$CONFIG_DIR/git/gitignore" "$HOME/.gitignore"
 backup_and_link "$CONFIG_DIR/zshrc" "$HOME/.zshrc"
 backup_and_link "$CONFIG_DIR/zprofile" "$HOME/.zprofile"
 
+# Symlink warp configuration
+mkdir -p "$HOME/.warp/themes"
+backup_and_link "$CONFIG_DIR/warp/monokai.yaml" "$HOME/.warp/themes/monokai.yaml"
+
 # Symlink starship configuration
 mkdir -p "$HOME/.config"
 backup_and_link "$CONFIG_DIR/starship.toml" "$HOME/.config/starship.toml"
