@@ -41,11 +41,6 @@ backup_and_link "$CONFIG_DIR/starship.toml" "$HOME/.config/starship.toml"
 # Symlink nix configuration directory
 backup_and_link "$CONFIG_DIR/nix" "$HOME/.config/nix"
 
-# Build karabiner configuration
-echo "Building karabiner configuration..."
-cd "$CONFIG_DIR/karabiner"
-bun run build
-
 # Install Nix using Determinate Systems installer
 echo "Installing Nix using Determinate Systems installer..."
 if ! command -v nix &> /dev/null; then
@@ -62,9 +57,10 @@ echo "Running nix-darwin switch..."
 cd "$CONFIG_DIR/nix"
 sudo nix run nix-darwin -- switch --flake .#setup
 
-# Symlink warp configuration
-mkdir -p "$HOME/.warp/themes"
-backup_and_link "$CONFIG_DIR/warp/monokai.yaml" "$HOME/.warp/themes/monokai.yaml"
+# Build karabiner configuration
+echo "Building karabiner configuration..."
+cd "$CONFIG_DIR/karabiner"
+bun run build
 
 echo "Development environment setup complete!"
 echo "Backup of previous configs saved to: $BACKUP_DIR"
