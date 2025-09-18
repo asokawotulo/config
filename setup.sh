@@ -26,6 +26,13 @@ backup_and_link() {
     ln -sf "$source" "$target"
 }
 
+echo "Installing Oh My Zsh..."
+if ! [ -d "$HOME/.oh-my-zsh" ]; then
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+else
+    echo "Oh My Zsh is already installed, skipping installation..."
+fi
+
 # Symlink git configuration files
 backup_and_link "$CONFIG_DIR/git/gitconfig" "$HOME/.gitconfig"
 backup_and_link "$CONFIG_DIR/git/gitignore" "$HOME/.gitignore"
