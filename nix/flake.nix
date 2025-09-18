@@ -96,16 +96,20 @@
           "google-drive"
           "imageoptim"
           "karabiner-elements"
-          "obsidian"
+          "notion"
           "orbstack"
           "orcaslicer"
           "postman"
           "raycast"
+          "setapp"
+          "slack"
           "spotify"
           "steam"
           "vlc"
           "warp"
+          "whatsapp"
           "zoom"
+          "zen"
         ];
       };
 
