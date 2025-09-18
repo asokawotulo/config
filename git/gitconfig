@@ -1,0 +1,12 @@
+user.name = Asoka Wotulo
+user.email = asokawotulo@yahoo.com
+
+core.excludesfile = ~/.gitignore
+
+core.editor = cursor
+diff.tool = cursor
+difftool.cursor = cursor --wait --diff
+merge.tool = cursor
+mergetool.cursor = cursor --wait --merge
+
+pull.rebase = true

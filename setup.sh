@@ -26,6 +26,10 @@ backup_and_link() {
     ln -sf "$source" "$target"
 }
 
+# Symlink git configuration files
+backup_and_link "$CONFIG_DIR/git/gitconfig" "$HOME/.gitconfig"
+backup_and_link "$CONFIG_DIR/git/gitignore" "$HOME/.gitignore"
+
 # Symlink shell configuration files
 backup_and_link "$CONFIG_DIR/zshrc" "$HOME/.zshrc"
 backup_and_link "$CONFIG_DIR/zprofile" "$HOME/.zprofile"
