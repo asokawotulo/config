@@ -6,7 +6,7 @@ import {
   writeToProfile,
 } from 'karabiner.ts'
 
-writeToProfile('Default', [
+writeToProfile('Default profile', [
   // #region Hyper Layer
   rule('Caps Lock to Hyper').manipulators([
     map('caps_lock').toHyper().toIfAlone('caps_lock'),
