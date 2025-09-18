@@ -41,8 +41,8 @@ else
     echo "Brew is already installed, skipping installation..."
 fi
 
-rm "$HOME/Pictures/background.png"
-ln -s "$CONFIG_DIR/background.png" "$HOME/Pictures/background.png"
+rm -f "$HOME/Pictures/background.png"
+ln -sf "$CONFIG_DIR/background/background.png" "$HOME/Pictures/background.png"
 
 # Symlink git configuration files
 backup_and_link "$CONFIG_DIR/git/gitconfig" "$HOME/.gitconfig"
