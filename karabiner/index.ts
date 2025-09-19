@@ -69,11 +69,7 @@ writeToProfile('Default profile', [
 
     // TODO: Custom commands for window management doesn't seem to work yet
     // map('r').to$("open -g 'raycast://customWindowManagementCommand?name=reasonableLarge'"),
-  ]),
-
-  // ! Hyper Layer "f" is for Finder
-  hyperLayer('f', 'HyperLayer - "f"').manipulators([
-    // map('j').to
+    // map('t').to$("open -g 'raycast://customWindowManagementCommand?name=reasonableLargeTop'"),
   ]),
 
   // ! Hyper Layer "d" is for docker
@@ -82,7 +78,6 @@ writeToProfile('Default profile', [
     map('a').to$('open -a "OrbStack"'),
   ]),
   // #endregion
-
 
   // #region Fn Layer
   rule('Layer - Fn').manipulators([
