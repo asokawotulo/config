@@ -140,7 +140,6 @@
         ];
         masApps = {
           "Airmail - Lightning Fast Email" = 918858936;
-          "MoneyWiz 2025 Personal Finance" = 1511185140;
         };
       };
     };
