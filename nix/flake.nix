@@ -16,17 +16,43 @@
 
   outputs = inputs@{ self, nix-darwin, home-manager, nixpkgs }:
   let
+    # Define your users here
+    users = [
+      "asoka"
+      # "trilogy"
+    ];
+    
+    # Helper function to create user configurations
+    createUserConfig = username: {
+      home = "/Users/${username}";
+    };
+    
+    # Helper function to create home-manager configurations
+    createHomeManagerConfig = username: {
+      home.username = username;
+      home.homeDirectory = "/Users/${username}";
+      home.stateVersion = "24.05";
+      home.packages = [];
+      programs.home-manager.enable = true;
+      targets.darwin.defaults = import ./darwin-configuration.nix;
+    };
+
     configuration = { pkgs, ... }: {
-      # User
-      users.users.asoka.home = "/Users/asoka";
-      users.users.trilogy.home = "/Users/trilogy";
+      # Dynamically create user configurations
+      users.users = builtins.listToAttrs (
+        map (username: {
+          name = username;
+          value = createUserConfig username;
+        }) users
+      );
+
       # nix.configureBuildUsers = true;
       # nix.useDaemon = true;
       # services.nix-daemon.enable = true;
 
       # Nix configurations.
       nix.settings.experimental-features = "nix-command flakes";
-      nix.settings.trusted-users = [ "root" "asoka" "trilogy" ];
+      nix.settings.trusted-users = [ "root" ] ++ users;
 
       # The platform the configuration will be used on.
       nixpkgs.hostPlatform = "aarch64-darwin";
@@ -127,8 +153,13 @@
         home-manager.darwinModules.home-manager {
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
-          home-manager.users.asoka = import ./home-asoka.nix;
-          home-manager.users.trilogy = import ./home-trilogy.nix;
+          # Dynamically create home-manager configurations
+          home-manager.users = builtins.listToAttrs (
+            map (username: {
+              name = username;
+              value = createHomeManagerConfig username;
+            }) users
+          );
         }
       ];
     };
