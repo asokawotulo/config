@@ -127,6 +127,7 @@
           "orbstack"
           "orcaslicer"
           "postman"
+          "protonvpn"
           "raycast"
           "setapp"
           "slack"
