@@ -53,6 +53,7 @@
           pkgs.pnpm
           pkgs.php81
           pkgs.go
+          pkgs.uv
           # TODO: Add packages from homebrew that are available in nixpkgs.
         ];
 

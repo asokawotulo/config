@@ -8,9 +8,6 @@ export SHOW_AWS_PROMPT="false"
 # Homebrew
 eval "$(/opt/homebrew/bin/brew shellenv)"
 
-# Conda
-eval "$(conda "shell.$(basename "${SHELL}")" hook)"
-
 # SSH Agent
 if [ -z "$SSH_AUTH_SOCK" ]; then
    # Check for a currently running instance of the agent
