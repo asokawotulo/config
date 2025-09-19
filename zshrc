@@ -52,9 +52,10 @@ alias c="cursor"
 alias ll="ls -lhA"
 alias pat="php artisan tinker"
 alias speed="speedtest -u auto-decimal-bytes"
-alias switch="darwin-rebuild switch --flake ~/config/nix#setup"
-alias update="brew update && omz update && nix flake update"
-alias upgrade="brew upgrade && brew cleanup && switch && nix-collect-garbage -d"
+alias nix_update="nix flake update"
+alias nix_switch="sudo darwin-rebuild switch --flake ~/config/nix#setup"
+alias update="brew update && omz update"
+alias upgrade="brew upgrade && brew cleanup"
 
 # pnpm
 export PNPM_HOME="$HOME/Library/pnpm"
