@@ -44,6 +44,11 @@ fi
 rm -f "$HOME/Pictures/background.png"
 ln -sf "$CONFIG_DIR/background/background.png" "$HOME/Pictures/background.png"
 
+# Symlink automator scripts
+echo "Symlinking automator scripts..."
+mkdir -p "$HOME/Library/Services"
+ln -sf "$CONFIG_DIR/automator/Open in Code Editor.workflow" "$HOME/Library/Services/"
+
 # Symlink git configuration files
 backup_and_link "$CONFIG_DIR/git/gitconfig" "$HOME/.gitconfig"
 backup_and_link "$CONFIG_DIR/git/gitignore" "$HOME/.gitignore"
