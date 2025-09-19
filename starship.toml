@@ -12,7 +12,7 @@ $hostname\
 $git_branch\
 $git_status\
 
-$conda\
+$python\
 $aws\
 $terraform\
 
@@ -64,8 +64,9 @@ read_only = ""
 [git_branch]
 symbol = ""
 
-[conda]
-format = "[conda:$environment]($style) "
+[python]
+format = "[python:$version (\\($virtualenv\\) )]($style)"
+version_format = "${raw}"
 
 [nodejs]
 format = "[node:$version]($style) "
