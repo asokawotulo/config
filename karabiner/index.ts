@@ -34,7 +34,7 @@ writeToProfile('Default profile', [
     map('s').toApp('Safari'),
     map('t').toApp('Warp'),
     map('w').toApp('WhatsApp'),
-    map('z').toApp('Zen Browser'),
+    map('z').toApp('Zen'),
     map('1').toApp('1Password'),
     map('2').toApp('Step Two'),
   ]),
