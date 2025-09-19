@@ -41,6 +41,8 @@ else
     echo "Brew is already installed, skipping installation..."
 fi
 
+# Symlink background image
+echo "Symlinking background image..."
 rm -f "$HOME/Pictures/background.png"
 ln -sf "$CONFIG_DIR/background/background.png" "$HOME/Pictures/background.png"
 
@@ -50,22 +52,27 @@ mkdir -p "$HOME/Library/Services"
 ln -sf "$CONFIG_DIR/automator/Open in Code Editor.workflow" "$HOME/Library/Services/"
 
 # Symlink git configuration files
+echo "Symlinking git configuration files..."
 backup_and_link "$CONFIG_DIR/git/gitconfig" "$HOME/.gitconfig"
 backup_and_link "$CONFIG_DIR/git/gitignore" "$HOME/.gitignore"
 
 # Symlink shell configuration files
+echo "Symlinking shell configuration files..."
 backup_and_link "$CONFIG_DIR/zshrc" "$HOME/.zshrc"
 backup_and_link "$CONFIG_DIR/zprofile" "$HOME/.zprofile"
 
 # Symlink warp configuration
+echo "Symlinking warp configuration..."
 mkdir -p "$HOME/.warp/themes"
 backup_and_link "$CONFIG_DIR/warp/monokai.yaml" "$HOME/.warp/themes/monokai.yaml"
 
 # Symlink starship configuration
+echo "Symlinking starship configuration..."
 mkdir -p "$HOME/.config"
 backup_and_link "$CONFIG_DIR/starship.toml" "$HOME/.config/starship.toml"
 
 # Symlink nix configuration directory
+echo "Symlinking nix configuration directory..."
 backup_and_link "$CONFIG_DIR/nix" "$HOME/.config/nix"
 
 # Install Nix using Determinate Systems installer
