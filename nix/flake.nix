@@ -34,6 +34,7 @@
       home.stateVersion = "24.05";
       home.packages = [];
       programs.home-manager.enable = true;
+      # TODO: Find a better way to declare configurations. Ideally, with home manager configuration and type hinting.
       targets.darwin.defaults = import ./darwin-configuration.nix;
     };
 
@@ -141,9 +142,9 @@
         ];
         masApps = {
           "Airmail - Lightning Fast Email" = 918858936;
-          "Microsoft Word" = 462054704;
           "Microsoft Excel" = 462058435;
           "Microsoft PowerPoint" = 462062816;
+          "Microsoft Word" = 462054704;
         };
       };
     };
