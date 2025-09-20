@@ -19,8 +19,6 @@ DISABLE_AUTO_TITLE="true"
 
 plugins=(
 	git
-	laravel
-	composer
 	direnv
 	starship
 	bun
