@@ -58,18 +58,18 @@ backup_and_link "$CONFIG_DIR/git/gitignore" "$HOME/.gitignore"
 
 # Symlink shell configuration files
 echo "Symlinking shell configuration files..."
-backup_and_link "$CONFIG_DIR/zshrc" "$HOME/.zshrc"
-backup_and_link "$CONFIG_DIR/zprofile" "$HOME/.zprofile"
+backup_and_link "$CONFIG_DIR/shell/zshrc" "$HOME/.zshrc"
+backup_and_link "$CONFIG_DIR/shell/zprofile" "$HOME/.zprofile"
+
+# Symlink starship configuration
+echo "Symlinking starship configuration..."
+mkdir -p "$HOME/.config"
+backup_and_link "$CONFIG_DIR/shell/starship.toml" "$HOME/.config/starship.toml"
 
 # Symlink warp configuration
 echo "Symlinking warp configuration..."
 mkdir -p "$HOME/.warp/themes"
 backup_and_link "$CONFIG_DIR/warp/monokai.yaml" "$HOME/.warp/themes/monokai.yaml"
-
-# Symlink starship configuration
-echo "Symlinking starship configuration..."
-mkdir -p "$HOME/.config"
-backup_and_link "$CONFIG_DIR/starship.toml" "$HOME/.config/starship.toml"
 
 # Symlink nix configuration directory
 echo "Symlinking nix configuration directory..."
