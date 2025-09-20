@@ -67,6 +67,7 @@ symbol = ""
 [python]
 format = "[python:$version (\\($virtualenv\\) )]($style)"
 version_format = "${raw}"
+style = "green bold"
 
 [nodejs]
 format = "[node:$version]($style) "
