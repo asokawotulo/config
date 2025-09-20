@@ -49,7 +49,7 @@ writeToProfile('Default profile', [
     .configKey((v) => v.toIfAlone('t', 'Hyper'))
     .manipulators([
       map('v').to$('open -g raycast://script-commands/toggle-vpn'),
-      map('l').to$('open -g raycast://extensions/sasivarnan/power-management/toggle-low-power-mode'),
+      map('l').to('l', ['control', 'option']), // Toggle Low Power Mode through Shortcut
       map('g').to('g', ['control', 'option']), // Toggle AdGuard through Shortcut
     ]),
 
