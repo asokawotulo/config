@@ -56,6 +56,7 @@ alias nix_update="nix flake update"
 alias nix_switch="sudo darwin-rebuild switch --flake ~/config/nix#setup"
 alias update="brew update && omz update"
 alias upgrade="brew upgrade && brew cleanup"
+alias clean="brew cleanup -s --prune=1" # TODO: Add more cleaning options
 
 # pnpm
 export PNPM_HOME="$HOME/Library/pnpm"
