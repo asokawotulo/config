@@ -66,10 +66,8 @@ writeToProfile('Default profile', [
     map('-').to$('open -g raycast://extensions/raycast/window-management/make-smaller'),
     map('.').to$('open -g raycast://extensions/raycast/window-management/next-desktop'),
     map(',').to$('open -g raycast://extensions/raycast/window-management/previous-desktop'),
-
-    // TODO: Custom commands for window management doesn't seem to work yet
-    // map('r').to$("open -g 'raycast://customWindowManagementCommand?name=reasonableLarge'"),
-    // map('t').to$("open -g 'raycast://customWindowManagementCommand?name=reasonableLargeTop'"),
+    map('l').to$("open -g 'raycast://customWindowManagementCommand?name=reasonableLarge'"),
+    map('t').to$("open -g 'raycast://customWindowManagementCommand?name=reasonableLargeTop'"),
   ]),
 
   // ! Hyper Layer "d" is for docker
