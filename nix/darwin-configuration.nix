@@ -37,10 +37,12 @@
     AutoOpenSafeDownloads = false;
     IncludeDevelopMenu = true;
     ShowOverlayStatusBar = true;
+    ShowFullURLInSmartSearchField = true;
   };
 
   NSGlobalDomain = {
     AppleShowAllExtensions = true;
+    AppleKeyboardUIMode = 2;
 
     # Undocumented settings
     "com.apple.swipescrolldirection" = false;
