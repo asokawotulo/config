@@ -47,6 +47,7 @@ fi
 
 # Aliases
 alias c="cursor"
+alias cd="z"
 alias ll="ls -lhA"
 alias pat="php artisan tinker"
 alias speed="speedtest -u auto-decimal-bytes"
@@ -62,4 +63,6 @@ case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
-# pnpm end
+
+eval "$(zoxide init zsh)"
+
