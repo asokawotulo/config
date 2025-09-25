@@ -11,6 +11,7 @@
       "1password"
       "adguard"
       "appcleaner"
+      "autodesk-fusion"
       "cursor"
       "discord"
       "google-chrome"
