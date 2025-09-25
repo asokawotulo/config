@@ -1,6 +1,7 @@
 {
 	"files.associations": {
 		"gitconfig": "toml",
-		"gitignore": "ignore"
+		"gitignore": "ignore",
+		"ismp7": "xml"
 	}
 }
