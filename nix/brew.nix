@@ -3,9 +3,9 @@
   homebrew = {
     enable = true;
     brews = [
+      "aria2"
       "opencode"
-	  "zoxide"
-	  "aria2"
+      "zoxide"
     ];
     casks = [
       "1password"
@@ -31,8 +31,8 @@
       "vlc"
       "warp"
       "whatsapp"
-      "zoom"
       "zen"
+      "zoom"
     ];
     masApps = {
       "Airmail - Lightning Fast Email" = 918858936;
