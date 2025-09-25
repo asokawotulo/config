@@ -42,49 +42,22 @@
 		<key>Migration.Profiles</key>
 		<true/>
 		<key>Notifications.Enabled</key>
-		<integer>0</integer>
+		<integer>1</integer>
 		<key>Notifications.Items</key>
 		<array>
 			<dict>
 				<key>enabled</key>
-				<integer>0</integer>
+				<integer>1</integer>
 				<key>source</key>
-				<string>battery-low</string>
-				<key>type</key>
-				<string>alert</string>
-				<key>uuid</key>
-				<string>4e1abe18-f00e-4f2f-9a69-1ee6d04643f4</string>
-			</dict>
-			<dict>
-				<key>enabled</key>
-				<integer>0</integer>
-				<key>source</key>
-				<string>daylightsaving</string>
-				<key>time</key>
-				<integer>0</integer>
-				<key>type</key>
-				<string>alert</string>
-				<key>uuid</key>
-				<string>7ad71b8c-c416-49c9-a5bc-41f76628c118</string>
-			</dict>
-			<dict>
-				<key>enabled</key>
-				<integer>0</integer>
-				<key>item</key>
-				<dict>
-					<key>key</key>
-					<string>any</string>
-				</dict>
-				<key>source</key>
-				<string>temperature</string>
+				<string>memory-pressure</string>
 				<key>time</key>
 				<string>30</string>
 				<key>type</key>
-				<string>banner</string>
+				<string>alert</string>
 				<key>uuid</key>
-				<string>3e5ac3eb-5a05-4b12-82fe-a51860e5851d</string>
+				<string>7C7073F1-6D2E-4E50-AF66-A46C6074F668</string>
 				<key>value</key>
-				<string>95</string>
+				<string>75</string>
 			</dict>
 		</array>
 		<key>Profiles.Available.identifier</key>
@@ -205,7 +178,7 @@
 			</dict>
 		</array>
 		<key>Sensors.Global.Fans.Manual.all</key>
-		<real>0.5</real>
+		<real>0.80</real>
 		<key>Sensors.Global.Fans.Mode</key>
 		<integer>2</integer>
 		<key>Status.Build.Last</key>
