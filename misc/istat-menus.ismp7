@@ -18,8 +18,11 @@
 		<integer>9</integer>
 		<key>Combined.Menu.Items</key>
 		<array>
-			<string>network-bandwidth</string>
 			<string>cpu-cpu</string>
+			<string>cpu-load</string>
+			<string>cpu-uptime</string>
+			<string>network-bandwidth</string>
+			<string>network-addresses-public</string>
 			<string>memory-memory</string>
 			<string>sensors-overview</string>
 			<string>battery-combined</string>
@@ -41,6 +44,10 @@
 		<true/>
 		<key>Migration.Profiles</key>
 		<true/>
+		<key>Network.Menubar.Global.Decimals.MB</key>
+		<integer>2</integer>
+		<key>Network.Menubar.Global.UnitSize</key>
+		<integer>3</integer>
 		<key>Notifications.Enabled</key>
 		<integer>1</integer>
 		<key>Notifications.Items</key>
@@ -79,6 +86,11 @@
 				<integer>1</integer>
 				<key>type</key>
 				<integer>5</integer>
+				<key>useroptions</key>
+				<dict>
+					<key>display</key>
+					<integer>0</integer>
+				</dict>
 			</dict>
 			<dict>
 				<key>source</key>
