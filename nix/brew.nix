@@ -3,6 +3,7 @@
   homebrew = {
     enable = true;
     taps = [
+      "sst/tap"
       "lihaoyun6/tap"
     ];
     brews = [
