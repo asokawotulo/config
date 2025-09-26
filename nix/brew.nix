@@ -2,6 +2,9 @@
   # Configure homebrew packages.
   homebrew = {
     enable = true;
+    taps = [
+      "lihaoyun6/tap"
+    ];
     brews = [
       "aria2"
       "opencode"
@@ -10,6 +13,7 @@
     casks = [
       "1password"
       "adguard"
+      "airbattery"
       "appcleaner"
       "autodesk-fusion"
       "cursor"
