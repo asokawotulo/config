@@ -19,7 +19,6 @@
     # Define your users here
     users = [
       "asoka"
-      # "trilogy"
     ];
     
     # Helper function to create user configurations
@@ -62,26 +61,29 @@
       nixpkgs.config.allowUnfree = true;
 
       # Packages to be installed in the system profile.
+      # NOTE: Packages here are those that we don't care about being kept up to date independently from nixpkgs. If we want to keep them up to date, we should add them to the homebrew configuration (./brew.nix).
       environment.systemPackages =
         [
-          pkgs.direnv
-          pkgs.devenv
-          pkgs.ngrok
-          pkgs.ookla-speedtest
-          pkgs.oha
-          pkgs.starship
+          pkgs.aria2
           pkgs.awscli2
-          pkgs.terraform
-          pkgs.packer
+          pkgs.bun
+          pkgs.devenv
+          pkgs.direnv
+          pkgs.go
           pkgs.httpie
           pkgs.mysql84
+          pkgs.ngrok
           pkgs.nodejs_22
-          pkgs.bun
-          pkgs.pnpm
+          pkgs.oha
+          pkgs.ookla-speedtest
+          pkgs.packer
           pkgs.php81
-          pkgs.go
+          pkgs.pnpm
+          pkgs.ripgrep
+          pkgs.starship
+          pkgs.terraform
           pkgs.uv
-          # TODO: Add packages from homebrew that are available in nixpkgs.
+          pkgs.zoxide
         ];
 
       # Create /etc/zshrc that loads the nix-darwin environment.
@@ -105,7 +107,6 @@
       # Custom fonts
       fonts.packages = [
         pkgs.nerd-fonts.jetbrains-mono
-        # (pkgs.nerd-fonts.override { fonts = [ "JetBrainsMono" ]; })
       ];
 
       # Import homebrew configuration

@@ -7,9 +7,7 @@
       "lihaoyun6/tap"
     ];
     brews = [
-      "aria2"
-      "opencode"
-      "zoxide"
+      "opencode" # OpenCode is kept here because updates happen frequently, and we want to keep it up to date independently from nixpkgs.
     ];
     casks = [
       "1password"
