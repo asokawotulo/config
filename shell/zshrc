@@ -51,7 +51,7 @@ alias cd="z"
 alias clean="brew cleanup -s --prune=1 && uv cache prune" # TODO: Add more cleaning options
 alias ll="ls -lhA"
 alias nix_switch="sudo darwin-rebuild switch --flake ~/config/nix#setup"
-alias nix_update="nix flake update"
+alias nix_update="nix flake update --flake ~/config/nix"
 alias speed="speedtest -u auto-decimal-bytes"
 alias update="brew update && omz update"
 alias upgrade="brew upgrade && brew cleanup"
