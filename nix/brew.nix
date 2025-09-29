@@ -15,6 +15,7 @@
       "airbattery"
       "appcleaner"
       "autodesk-fusion"
+      "bettertouchtool"
       "cursor"
       "discord"
       "google-chrome"
