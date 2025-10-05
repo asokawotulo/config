@@ -4,7 +4,6 @@
     enable = true;
     taps = [
       "sst/tap"
-      "lihaoyun6/tap"
     ];
     brews = [
       "opencode" # OpenCode is kept here because updates happen frequently, and we want to keep it up to date independently from nixpkgs.
@@ -12,7 +11,6 @@
     casks = [
       "1password"
       "adguard"
-      "airbattery"
       "appcleaner"
       "autodesk-fusion"
       "cursor"
