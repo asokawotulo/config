@@ -77,7 +77,6 @@
           pkgs.oha
           pkgs.ookla-speedtest
           pkgs.packer
-          pkgs.php81
           pkgs.pnpm
           pkgs.ripgrep
           pkgs.starship
