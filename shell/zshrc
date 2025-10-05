@@ -53,7 +53,7 @@ alias ll="ls -lhA"
 alias nix_switch="sudo darwin-rebuild switch --flake ~/config/nix#setup"
 alias nix_update="nix flake update --flake ~/config/nix"
 alias speed="speedtest -u auto-decimal-bytes"
-alias update="brew update && omz update"
+alias update="brew update && omz update && nix_update"
 alias upgrade="brew upgrade && brew cleanup"
 
 
