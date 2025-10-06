@@ -11,6 +11,7 @@
     casks = [
       "1password"
       "adguard"
+      "android-studio"
       "appcleaner"
       "autodesk-fusion"
       "cursor"
