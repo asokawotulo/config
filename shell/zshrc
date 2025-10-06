@@ -56,13 +56,15 @@ alias speed="speedtest -u auto-decimal-bytes"
 alias update="brew update && omz update && nix_update"
 alias upgrade="brew upgrade && brew cleanup"
 
-
 # pnpm
 export PNPM_HOME="$HOME/Library/pnpm"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
+
+# Java
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home
 
 eval "$(zoxide init zsh)"
 

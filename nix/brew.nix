@@ -34,6 +34,7 @@
       "whatsapp"
       "zen"
       "zoom"
+      "zulu@17" # OpenJDK for Java
     ];
     masApps = {
       "Airmail - Lightning Fast Email" = 918858936;
