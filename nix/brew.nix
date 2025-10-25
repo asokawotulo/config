@@ -14,6 +14,7 @@
       "android-studio"
       "appcleaner"
       "autodesk-fusion"
+      "claude-code"
       "cursor"
       "discord"
       "google-chrome"
