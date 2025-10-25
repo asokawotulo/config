@@ -82,6 +82,7 @@
           pkgs.starship
           pkgs.terraform
           pkgs.uv
+          pkgs.yarn
           pkgs.zoxide
         ];
 
