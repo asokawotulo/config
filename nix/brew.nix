@@ -12,6 +12,13 @@
       # Mobile & platform development
       "xcode-build-server"
       "xcbeautify"
+
+      # Python Dependencies
+      # WeasyPrint dependencies
+      "cairo"
+      "pango"
+      "gdk-pixbuf"
+      "libffi"
     ];
     casks = [
       # General apps
