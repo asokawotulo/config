@@ -81,6 +81,7 @@
           pkgs.ripgrep
           pkgs.starship
           pkgs.terraform
+          pkgs.tree
           pkgs.uv
           pkgs.yarn
           pkgs.zoxide
