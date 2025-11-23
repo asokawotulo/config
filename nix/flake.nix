@@ -64,27 +64,35 @@
       # NOTE: Packages here are those that we don't care about being kept up to date independently from nixpkgs. If we want to keep them up to date, we should add them to the homebrew configuration (./brew.nix).
       environment.systemPackages =
         [
-          pkgs.aria2
-          pkgs.awscli2
+          # Development tools
           pkgs.bun
           pkgs.devenv
           pkgs.direnv
+          pkgs.git-lfs
           pkgs.go
-          pkgs.httpie
-          pkgs.mysql84
-          pkgs.ngrok
           pkgs.nodejs_22
-          pkgs.oha
-          pkgs.ookla-speedtest
-          pkgs.packer
           pkgs.pnpm
           pkgs.ripgrep
           pkgs.starship
-          pkgs.terraform
           pkgs.tree
           pkgs.uv
           pkgs.yarn
           pkgs.zoxide
+
+          # Infrastructure & DevOps
+          pkgs.awscli2
+          pkgs.packer
+          pkgs.terraform
+
+          # Network & testing tools
+          pkgs.aria2
+          pkgs.httpie
+          pkgs.ngrok
+          pkgs.oha
+          pkgs.ookla-speedtest
+
+          # Database
+          pkgs.mysql84
         ];
 
       # Create /etc/zshrc that loads the nix-darwin environment.
