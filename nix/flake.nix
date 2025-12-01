@@ -77,6 +77,7 @@
           pkgs.tree
           pkgs.uv
           pkgs.yarn
+          pkgs.zig_0_14
           pkgs.zoxide
 
           # Infrastructure & DevOps
