@@ -1,0 +1,8 @@
+{
+	"$schema": "https://opencode.ai/config.json",
+	"theme": "opencode",
+	"autoupdate": false,
+	"keybinds": {
+		"input_newline": "shift+return,shift+enter,shift+linefeed,linefeed,ctrl+j"
+	}
+}
