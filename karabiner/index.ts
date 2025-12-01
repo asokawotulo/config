@@ -32,7 +32,7 @@ writeToProfile('Default profile', [
     map('m').toApp('Airmail'),
     map('p').toApp('Postman'),
     map('s').toApp('Safari'),
-    map('t').toApp('Warp'),
+    map('t').toApp('Ghostty'),
     map('w').toApp('WhatsApp'),
     map('z').toApp('Zen'),
     map('1').toApp('1Password'),
