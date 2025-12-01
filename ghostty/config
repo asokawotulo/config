@@ -1,0 +1,47 @@
+# Colors
+background = #26292C
+foreground = #FFFFFF
+palette = 0=#1F1F1F
+palette = 1=#DD454D
+palette = 2=#A6E22E
+palette = 3=#F1E88E
+palette = 4=#7569F6
+palette = 5=#EE7FF8
+palette = 6=#97E9FC
+palette = 7=#E5E5E5
+palette = 8=#4B4B4B
+palette = 9=#EC141F
+palette = 10=#A6E22E
+palette = 11=#E6DB74
+palette = 12=#7569F6
+palette = 13=#EE7FF8
+palette = 14=#66D9EF
+palette = 15=#E5E5E5
+
+# Font
+font-family = "JetBrainsMono Nerd Font Mono"
+font-feature = "calt,liga,dlig"
+font-size = 13
+
+# Cursor
+cursor-style = bar
+
+# Window
+window-width = 205
+window-height = 53
+window-position-x = 207
+window-position-y = 70
+window-show-tab-bar = always
+
+# Shell
+shell-integration = zsh
+
+# Notifications
+bell-features = system,audio,attention,title,no-border
+
+# Icon
+macos-icon = xray
+
+# Auto-update
+auto-update = download
+auto-update-channel = stable
