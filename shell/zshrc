@@ -23,6 +23,10 @@ plugins=(
 	starship
 	bun
 	aws
+	zsh-autosuggestions
+	zsh-syntax-highlighting
+	fast-syntax-highlighting
+	zsh-autocomplete
 )
 
 # LS Colors
