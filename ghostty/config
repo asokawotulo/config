@@ -41,6 +41,7 @@ bell-features = system,audio,attention,title,no-border
 
 # Icon
 macos-icon = xray
+macos-titlebar-style = tabs
 
 # Auto-update
 auto-update = download
