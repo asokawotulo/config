@@ -23,6 +23,7 @@ plugins=(
 	starship
 	bun
 	aws
+	httpie
 	zsh-autosuggestions
 	zsh-syntax-highlighting
 	fast-syntax-highlighting
