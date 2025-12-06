@@ -39,9 +39,10 @@ shell-integration = zsh
 # Notifications
 bell-features = system,audio,attention,title,no-border
 
-# Icon
+# MacOS
 macos-icon = xray
 macos-titlebar-style = tabs
+macos-option-as-alt = true
 
 # Auto-update
 auto-update = download
