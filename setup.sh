@@ -66,10 +66,10 @@ echo "Symlinking starship configuration..."
 mkdir -p "$HOME/.config"
 backup_and_link "$CONFIG_DIR/shell/starship.toml" "$HOME/.config/starship.toml"
 
-# Symlink warp configuration
-echo "Symlinking warp configuration..."
-mkdir -p "$HOME/.warp/themes"
-backup_and_link "$CONFIG_DIR/warp/monokai.yaml" "$HOME/.warp/themes/monokai.yaml"
+# Symlink ghostty configuration
+echo "Symlinking ghostty configuration..."
+mkdir -p "$HOME/.config/ghostty"
+backup_and_link "$CONFIG_DIR/ghostty/config" "$HOME/.config/ghostty/config"
 
 # Symlink nix configuration directory
 echo "Symlinking nix configuration directory..."

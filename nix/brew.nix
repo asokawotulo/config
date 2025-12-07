@@ -44,8 +44,8 @@
       # Dev environment & tools
       "claude-code"
       "cursor"
+      "ghostty"
       "postman"
-      "warp"
       "zulu@17"
 
       # Mobile & platform development
