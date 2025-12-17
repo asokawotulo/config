@@ -68,8 +68,10 @@
           pkgs.bun
           pkgs.devenv
           pkgs.direnv
+          pkgs.fzf
           pkgs.git-lfs
           pkgs.go
+          pkgs.mkcert
           pkgs.nodejs_22
           pkgs.pnpm
           pkgs.ripgrep
