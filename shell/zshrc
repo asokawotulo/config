@@ -17,6 +17,9 @@ ZSH_COMPDUMP="$ZSH/cache/completions/.zcompdump-${HOST/.*/}-${ZSH_VERSION}"
 # Disable auto-setting terminal title
 DISABLE_AUTO_TITLE="true"
 
+# Zoxide
+ZOXIDE_CMD_OVERRIDE="cd"
+
 plugins=(
 	git
 	direnv
@@ -28,6 +31,7 @@ plugins=(
 	zsh-syntax-highlighting
 	fast-syntax-highlighting
 	zsh-autocomplete
+	zoxide
 )
 
 # LS Colors
@@ -52,7 +56,6 @@ fi
 
 # Aliases
 alias c="cursor"
-alias cd="z"
 # TODO: Add more cleaning options
 alias clean="brew cleanup -s --prune=1 && uv cache prune && pnpm store prune && bun pm cache rm -g && npm cache clean --force && yarn cache clean --all && nix-collect-garbage -d"
 alias ll="ls -lhA"
@@ -79,6 +82,3 @@ export PATH=$PATH:$ANDROID_HOME/platform-tools
 
 # UV
 export PATH="/Users/asoka/.local/bin:$PATH"
-
-# Zoxide
-eval "$(zoxide init zsh)"
