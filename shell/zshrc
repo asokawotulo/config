@@ -56,14 +56,24 @@ fi
 
 # Aliases
 alias c="cursor"
-# TODO: Add more cleaning options
-alias clean="brew cleanup -s --prune=1 && uv cache prune && pnpm store prune && bun pm cache rm -g && npm cache clean --force && yarn cache clean --all && nix-collect-garbage -d"
 alias ll="ls -lhA"
 alias nix_switch="sudo darwin-rebuild switch --flake ~/config/nix#setup"
 alias nix_update="nix flake update --flake ~/config/nix"
 alias speed="speedtest -u auto-decimal-bytes"
 alias update="brew update && omz update && nix_update"
 alias upgrade="brew upgrade && brew cleanup"
+
+# Functions
+clean() {
+	# TODO: Add more cleaning options
+	brew cleanup -s --prune=1
+	uv cache prune
+	pnpm store prune
+	bun pm cache rm -g
+	npm cache clean --force
+	yarn cache clean --all
+	nix-collect-garbage -d
+}
 
 # pnpm
 export PNPM_HOME="$HOME/Library/pnpm"
