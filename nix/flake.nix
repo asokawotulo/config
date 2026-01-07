@@ -88,7 +88,6 @@
           pkgs.terraform
 
           # Network & testing tools
-          pkgs.aria2
           pkgs.httpie
           pkgs.ngrok
           pkgs.oha

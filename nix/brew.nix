@@ -9,6 +9,9 @@
       # Development tools
       "opencode" # OpenCode is kept here because updates happen frequently, and we want to keep it up to date independently from nixpkgs.
 
+      # Network & testing tools
+      "aria2"
+
       # Mobile & platform development
       "xcode-build-server"
       "xcbeautify"
