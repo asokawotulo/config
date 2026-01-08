@@ -72,7 +72,7 @@ clean() {
 	bun pm cache rm -g
 	npm cache clean --force
 	yarn cache clean --all
-	nix-collect-garbage -d
+	sudo zsh -c "nix-collect-garbage -d"
 }
 
 # pnpm
