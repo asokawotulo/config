@@ -71,6 +71,11 @@ echo "Symlinking ghostty configuration..."
 mkdir -p "$HOME/.config/ghostty"
 backup_and_link "$CONFIG_DIR/ghostty/config" "$HOME/.config/ghostty/config"
 
+# Symlink opencode configuration
+echo "Symlinking opencode configuration..."
+mkdir -p "$HOME/.config/opencode"
+backup_and_link "$CONFIG_DIR/opencode" "$HOME/.config/opencode"
+
 # Symlink nix configuration directory
 echo "Symlinking nix configuration directory..."
 backup_and_link "$CONFIG_DIR/nix" "$HOME/.config/nix"
