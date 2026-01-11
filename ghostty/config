@@ -1,3 +1,6 @@
+# Update channel
+auto-update-channel = tip
+
 # Colors
 background = #26292C
 foreground = #FFFFFF

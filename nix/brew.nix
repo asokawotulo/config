@@ -48,7 +48,7 @@
       "antigravity"
       "claude-code"
       "cursor"
-      "ghostty"
+      "ghostty@tip"
       "postman"
       "zulu@17"
 
