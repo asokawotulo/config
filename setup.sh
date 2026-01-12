@@ -76,6 +76,11 @@ echo "Symlinking opencode configuration..."
 mkdir -p "$HOME/.config/opencode"
 backup_and_link "$CONFIG_DIR/opencode" "$HOME/.config/opencode"
 
+# Symlink btca configuration
+echo "Symlinking btca configuration..."
+mkdir -p "$HOME/.config/btca"
+backup_and_link "$CONFIG_DIR/btca" "$HOME/.config/btca"
+
 # Symlink nix configuration directory
 echo "Symlinking nix configuration directory..."
 backup_and_link "$CONFIG_DIR/nix" "$HOME/.config/nix"
