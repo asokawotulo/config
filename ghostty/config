@@ -1,4 +1,5 @@
 # Update channel
+auto-update = download
 auto-update-channel = tip
 
 # Colors
@@ -43,7 +44,3 @@ bell-features = system,audio,attention,title,no-border
 macos-icon = xray
 macos-titlebar-style = tabs
 macos-option-as-alt = true
-
-# Auto-update
-auto-update = download
-auto-update-channel = stable
