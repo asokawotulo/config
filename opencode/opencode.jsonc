@@ -6,13 +6,124 @@
 		"opencode-google-antigravity-auth",
 	],
 	"provider": {
-		"google": {
-			"npm": "@ai-sdk/google",
+		"quotio": {
+			"npm": "@ai-sdk/openai-compatible",
+			"name": "Quotio",
+			"options": {
+				"baseURL": "http://127.0.0.1:8317/v1"
+			},
 			"models": {
-				"gemini-3-pro-preview": {
+				"gemini-claude-opus-4-5": {
+					"id": "gemini-claude-opus-4-5-thinking",
+					"name": "Claude Opus 4.5 (Thinking)",
+					"reasoning": true,
+					"limit": {
+						"context": 200000,
+						"output": 64000
+					},
+					"cost": {
+						"input": 5,
+						"output": 25,
+						"cache_read": 0.5
+					},
+					"modalities": {
+						"input": [
+							"text",
+							"image",
+							"pdf"
+						],
+						"output": [
+							"text"
+						]
+					},
+					"variants": {
+						"high": {
+							"thinkingConfig": {
+								"thinkingBudget": 32000,
+								"includeThoughts": true
+							}
+						},
+						"medium": {
+							"thinkingConfig": {
+								"thinkingBudget": 16000,
+								"includeThoughts": true
+							}
+						},
+						"low": {
+							"thinkingConfig": {
+								"thinkingBudget": 4000,
+								"includeThoughts": true
+							}
+						}
+					}
+				},
+				"gemini-claude-sonnet-4-5": {
+					"id": "gemini-claude-sonnet-4-5",
+					"name": "Claude Sonnet 4.5",
+					"reasoning": false,
+					"limit": {
+						"context": 200000,
+						"output": 64000
+					},
+					"cost": {
+						"input": 3,
+						"output": 15,
+						"cache_read": 0.3
+					},
+					"modalities": {
+						"input": [
+							"text",
+							"image",
+							"pdf"
+						],
+						"output": [
+							"text"
+						]
+					},
+					"options": {
+						"thinkingConfig": {
+							"thinkingBudget": 32000,
+							"includeThoughts": true
+						}
+					}
+				},
+				"gemini-claude-sonnet-4-5-thinking": {
+					"id": "gemini-claude-sonnet-4-5-thinking",
+					"name": "Claude Sonnet 4.5 (Thinking)",
+					"reasoning": true,
+					"limit": {
+						"context": 200000,
+						"output": 64000
+					},
+					"cost": {
+						"input": 3,
+						"output": 15,
+						"cache_read": 0.3
+					},
+					"variants": {
+						"high": {
+							"thinkingConfig": {
+								"thinkingBudget": 32000,
+								"includeThoughts": true
+							}
+						},
+						"medium": {
+							"thinkingConfig": {
+								"thinkingBudget": 16000,
+								"includeThoughts": true
+							}
+						},
+						"low": {
+							"thinkingConfig": {
+								"thinkingBudget": 4000,
+								"includeThoughts": true
+							}
+						}
+					}
+				},
+				"gemini-3-pro": {
 					"id": "gemini-3-pro-preview",
 					"name": "Gemini 3 Pro Preview",
-					"release_date": "2025-11-18",
 					"reasoning": true,
 					"limit": {
 						"context": 1000000,
@@ -34,277 +145,53 @@
 						"output": [
 							"text"
 						]
-					}
-				},
-				"gemini-3-pro-high": {
-					"id": "gemini-3-pro-preview",
-					"name": "Gemini 3 Pro Preview (High Thinking)",
-					"options": {
-						"thinkingConfig": {
-							"thinkingLevel": "high",
-							"includeThoughts": true
+					},
+					"variants": {
+						"high": {
+							"thinkingConfig": {
+								"thinkingBudget": 32000,
+								"includeThoughts": true
+							}
+						},
+						"medium": {
+							"thinkingConfig": {
+								"thinkingBudget": 16000,
+								"includeThoughts": true
+							}
+						},
+						"low": {
+							"thinkingConfig": {
+								"thinkingBudget": 4000,
+								"includeThoughts": true
+							}
 						}
 					}
 				},
-				"gemini-3-pro-medium": {
-					"id": "gemini-3-pro-preview",
-					"name": "Gemini 3 Pro Preview (Medium Thinking)",
-					"options": {
-						"thinkingConfig": {
-							"thinkingLevel": "medium",
-							"includeThoughts": true
-						}
-					}
-				},
-				"gemini-3-pro-low": {
-					"id": "gemini-3-pro-preview",
-					"name": "Gemini 3 Pro Preview (Low Thinking)",
-					"options": {
-						"thinkingConfig": {
-							"thinkingLevel": "low",
-							"includeThoughts": true
-						}
-					}
-				},
-				"gemini-2.5-flash": {
-					"id": "gemini-2.5-flash",
-					"name": "Gemini 2.5 Flash",
-					"release_date": "2025-03-20",
+				"gemini-3-flash": {
+					"id": "gemini-3-flash-preview",
+					"name": "Gemini 3 Flash",
 					"reasoning": true,
 					"limit": {
-						"context": 1048576,
-						"output": 65536
+						"context": 1000000,
+						"output": 64000
 					},
 					"cost": {
-						"input": 0.3,
-						"output": 2.5,
-						"cache_read": 0.075
+						"input": 0.5,
+						"output": 3,
+						"cache_read": 0.05
 					},
 					"modalities": {
 						"input": [
 							"text",
 							"image",
-							"audio",
 							"video",
-							"pdf"
-						],
-						"output": [
-							"text"
-						]
-					}
-				},
-				"gemini-2.5-flash-lite": {
-					"id": "gemini-2.5-flash-lite",
-					"name": "Gemini 2.5 Flash Lite",
-					"release_date": "2025-06-17",
-					"reasoning": true,
-					"limit": {
-						"context": 1048576,
-						"output": 65536
-					},
-					"cost": {
-						"input": 0.1,
-						"output": 0.4,
-						"cache_read": 0.025
-					},
-					"modalities": {
-						"input": [
-							"text",
-							"image",
 							"audio",
-							"video",
-							"pdf"
-						],
-						"output": [
-							"text"
-						]
-					}
-				},
-				"gemini-claude-sonnet-4-5-thinking-high": {
-					"id": "gemini-claude-sonnet-4-5-thinking",
-					"name": "Claude Sonnet 4.5 (High Thinking)",
-					"release_date": "2025-11-18",
-					"reasoning": true,
-					"limit": {
-						"context": 200000,
-						"output": 64000
-					},
-					"cost": {
-						"input": 3,
-						"output": 15,
-						"cache_read": 0.3
-					},
-					"modalities": {
-						"input": [
-							"text",
-							"image",
 							"pdf"
 						],
 						"output": [
 							"text"
 						]
 					},
-					"options": {
-						"thinkingConfig": {
-							"thinkingBudget": 32000,
-							"includeThoughts": true
-						}
-					}
-				},
-				"gemini-claude-sonnet-4-5-thinking-medium": {
-					"id": "gemini-claude-sonnet-4-5-thinking",
-					"name": "Claude Sonnet 4.5 (Medium Thinking)",
-					"release_date": "2025-11-18",
-					"reasoning": true,
-					"limit": {
-						"context": 200000,
-						"output": 64000
-					},
-					"cost": {
-						"input": 3,
-						"output": 15,
-						"cache_read": 0.3
-					},
-					"modalities": {
-						"input": [
-							"text",
-							"image",
-							"pdf"
-						],
-						"output": [
-							"text"
-						]
-					},
-					"options": {
-						"thinkingConfig": {
-							"thinkingBudget": 16000,
-							"includeThoughts": true
-						}
-					}
-				},
-				"gemini-claude-sonnet-4-5-thinking-low": {
-					"id": "gemini-claude-sonnet-4-5-thinking",
-					"name": "Claude Sonnet 4.5 (Low Thinking)",
-					"release_date": "2025-11-18",
-					"reasoning": true,
-					"limit": {
-						"context": 200000,
-						"output": 64000
-					},
-					"cost": {
-						"input": 3,
-						"output": 15,
-						"cache_read": 0.3
-					},
-					"modalities": {
-						"input": [
-							"text",
-							"image",
-							"pdf"
-						],
-						"output": [
-							"text"
-						]
-					},
-					"options": {
-						"thinkingConfig": {
-							"thinkingBudget": 4000,
-							"includeThoughts": true
-						}
-					}
-				},
-				"gemini-claude-opus-4-5-thinking-high": {
-					"id": "gemini-claude-opus-4-5-thinking",
-					"name": "Claude Opus 4.5 (High Thinking)",
-					"release_date": "2025-11-24",
-					"reasoning": true,
-					"limit": {
-						"context": 200000,
-						"output": 64000
-					},
-					"cost": {
-						"input": 5,
-						"output": 25,
-						"cache_read": 0.5
-					},
-					"modalities": {
-						"input": [
-							"text",
-							"image",
-							"pdf"
-						],
-						"output": [
-							"text"
-						]
-					},
-					"options": {
-						"thinkingConfig": {
-							"thinkingBudget": 32000,
-							"includeThoughts": true
-						}
-					}
-				},
-				"gemini-claude-opus-4-5-thinking-medium": {
-					"id": "gemini-claude-opus-4-5-thinking",
-					"name": "Claude Opus 4.5 (Medium Thinking)",
-					"release_date": "2025-11-24",
-					"reasoning": true,
-					"limit": {
-						"context": 200000,
-						"output": 64000
-					},
-					"cost": {
-						"input": 5,
-						"output": 25,
-						"cache_read": 0.5
-					},
-					"modalities": {
-						"input": [
-							"text",
-							"image",
-							"pdf"
-						],
-						"output": [
-							"text"
-						]
-					},
-					"options": {
-						"thinkingConfig": {
-							"thinkingBudget": 16000,
-							"includeThoughts": true
-						}
-					}
-				},
-				"gemini-claude-opus-4-5-thinking-low": {
-					"id": "gemini-claude-opus-4-5-thinking",
-					"name": "Claude Opus 4.5 (Low Thinking)",
-					"release_date": "2025-11-24",
-					"reasoning": true,
-					"limit": {
-						"context": 200000,
-						"output": 64000
-					},
-					"cost": {
-						"input": 5,
-						"output": 25,
-						"cache_read": 0.5
-					},
-					"modalities": {
-						"input": [
-							"text",
-							"image",
-							"pdf"
-						],
-						"output": [
-							"text"
-						]
-					},
-					"options": {
-						"thinkingConfig": {
-							"thinkingBudget": 4000,
-							"includeThoughts": true
-						}
-					}
 				}
 			}
 		}
