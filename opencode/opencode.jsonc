@@ -7,7 +7,7 @@
 	],
 	"provider": {
 		"quotio": {
-			"npm": "@ai-sdk/openai-compatible",
+			"npm": "@ai-sdk/anthropic",
 			"name": "Quotio",
 			"options": {
 				"baseURL": "http://127.0.0.1:8317/v1"
