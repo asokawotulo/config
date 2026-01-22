@@ -2,6 +2,12 @@
 	"$schema": "https://opencode.ai/config.json",
 	"theme": "opencode",
 	"autoupdate": false,
+	"enabled_providers": [
+		"anthropic",
+		"github-copilot",
+		"opencode",
+		"quotio",
+	],
 	"provider": {
 		"quotio": {
 			"npm": "@ai-sdk/anthropic",
