@@ -1,7 +1,7 @@
 {
   "$schema": "https://btca.dev/btca.schema.json",
-  "provider": "opencode",
-  "model": "minimax-m2.1-free",
+  "provider": "quotio",
+  "model": "gemini-3-flash",
   "resources": [
     {
       "type": "git",
