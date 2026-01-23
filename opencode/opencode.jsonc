@@ -2,6 +2,20 @@
 	"$schema": "https://opencode.ai/config.json",
 	"theme": "opencode",
 	"autoupdate": false,
+	"agent": {
+		"explore": {
+			"model": "quotio/gemini-3-flash",
+		},
+		"build": {
+			"model": "opencode/glm-4.7-free"
+		},
+		"plan": {
+			"model": "opencode/minimax-m2.1-free",
+			"permission": {
+				"question": "allow"
+			}
+		}
+	},
 	"enabled_providers": [
 		"anthropic",
 		"github-copilot",
