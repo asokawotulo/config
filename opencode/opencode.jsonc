@@ -4,10 +4,10 @@
 	"autoupdate": false,
 	"agent": {
 		"explore": {
-			"model": "quotio/gemini-3-flash",
+			"disable": true
 		},
-		"build": {
-			"model": "opencode/glm-4.7-free"
+		"general": {
+			"disable": true
 		},
 		"plan": {
 			"model": "opencode/minimax-m2.1-free",
