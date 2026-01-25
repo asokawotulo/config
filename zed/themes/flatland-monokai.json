@@ -1,0 +1,18 @@
+{
+	"$schema": "https://zed.dev/schema/themes/v0.2.0.json",
+	"name": "Flatland Monokai",
+	"author": "Asoka Wotulo",
+	"themes": [
+		{
+			"name": "Flatland Monokai",
+			"appearance": "dark",
+			"style": {
+				"editor.background": "#26292C",
+				"editor.foreground": "#FFFFFF",
+				"editor.lineHighlightBackground": "#26292C",
+				"editor.lineHighlightForeground": "#FFFFFF",
+				"editor.lineHighlightBorder": "#26292C"
+			}
+		}
+	]
+}
