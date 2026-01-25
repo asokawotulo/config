@@ -65,6 +65,7 @@
       environment.systemPackages =
         [
           # Development tools
+          pkgs.ast-grep
           pkgs.bun
           pkgs.devenv
           pkgs.direnv
