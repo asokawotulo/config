@@ -77,6 +77,7 @@
           pkgs.pnpm
           pkgs.ripgrep
           pkgs.starship
+          pkgs.terminal-notifier
           pkgs.tree
           pkgs.uv
           pkgs.yarn
