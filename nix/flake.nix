@@ -72,6 +72,7 @@
           pkgs.fzf
           pkgs.git-lfs
           pkgs.go
+          pkgs.just
           pkgs.mkcert
           pkgs.nodejs_22
           pkgs.pnpm
