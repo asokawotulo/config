@@ -95,3 +95,6 @@ export PATH=$PATH:$ANDROID_HOME/platform-tools
 
 # UV
 export PATH="/Users/asoka/.local/bin:$PATH"
+
+# OpenCode
+source $HOME/.config/opencode/flags.zsh

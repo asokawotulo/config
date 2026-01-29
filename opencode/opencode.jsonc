@@ -22,6 +22,9 @@
 		"opencode",
 		"quotio",
 	],
+	"experimental": {
+		"disable_paste_summary": true,
+	},
 	"provider": {
 		"quotio": {
 			"npm": "@ai-sdk/anthropic",
