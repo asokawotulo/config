@@ -42,7 +42,6 @@
       "spotify"
       "whatsapp"
       "zen"
-      "zoom"
 
       # Dev environment & tools
       "antigravity"
