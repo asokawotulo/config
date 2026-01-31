@@ -51,9 +51,6 @@
       "postman"
       "zulu@17"
 
-      # Mobile & platform development
-      "android-studio"
-
       # Virtualization & containerization
       "orbstack"
 
