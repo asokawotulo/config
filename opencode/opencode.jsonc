@@ -10,7 +10,7 @@
 			"disable": true
 		},
 		"plan": {
-			"model": "opencode/minimax-m2.1-free",
+			"model": "opencode/minimax-m2.1",
 			"permission": {
 				"question": "allow"
 			}
