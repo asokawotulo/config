@@ -49,7 +49,6 @@
       "cursor"
       "ghostty@tip"
       "postman"
-      "zulu@17"
 
       # Virtualization & containerization
       "orbstack"
