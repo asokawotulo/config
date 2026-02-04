@@ -17,11 +17,7 @@
       "xcbeautify"
 
       # Python Dependencies
-      # WeasyPrint dependencies
-      "cairo"
-      "pango"
-      "gdk-pixbuf"
-      "libffi"
+      "weasyprint"
     ];
     casks = [
       # General apps
