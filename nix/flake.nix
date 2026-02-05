@@ -67,7 +67,6 @@
           # Development tools
           pkgs.ast-grep
           pkgs.bun
-          pkgs.devenv
           pkgs.direnv
           pkgs.fzf
           pkgs.git-lfs
@@ -96,9 +95,6 @@
           pkgs.ngrok
           pkgs.oha
           pkgs.ookla-speedtest
-
-          # Database
-          pkgs.mysql84
         ];
 
       # Create /etc/zshrc that loads the nix-darwin environment.
