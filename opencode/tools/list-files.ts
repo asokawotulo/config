@@ -34,8 +34,14 @@ export default tool({
       .describe(
         "Output style: 'simple' (names only), 'long' (permissions/size), 'all' (includes hidden files), 'tree' (hierarchical view). Default: 'simple'.",
       ),
+    depth: tool.schema
+      .number()
+      .default(2)
+      .describe(
+        "Tree depth (only used when style is 'tree'). Default: 2.",
+      ),
   },
-  async execute({ path, style }, ctx: ToolContext) {
+  async execute({ path, style, depth }, ctx: ToolContext) {
     const { agent } = ctx;
 
     // =========================================================================
@@ -61,7 +67,7 @@ export default tool({
           flags.push("-lah");
           break;
         case "tree":
-          return await Bun.$`tree -L 2 ${path}`.nothrow().text();
+          return await Bun.$`tree -L ${depth} ${path}`.nothrow().text();
       }
 
       return await Bun.$`ls ${flags} ${path}`.nothrow().text();
