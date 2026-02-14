@@ -9,8 +9,11 @@
 		"general": {
 			"disable": true
 		},
+		"build": {
+			"model": "opencode/kimi-k2.5"
+		},
 		"plan": {
-			"model": "opencode/minimax-m2.1",
+			"model": "opencode/minimax-m2.5-free",
 			"permission": {
 				"question": "allow"
 			}
