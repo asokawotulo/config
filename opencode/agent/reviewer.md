@@ -1,6 +1,6 @@
 ---
 description: The Critic. Reviews code, architecture, and security.
-model: anthropic/claude-sonnet-4-5
+model: opencode/glm-5
 mode: subagent
 temperature: 1.0
 
@@ -21,24 +21,6 @@ tools:
   skill: true
   todoread: true
   todowrite: true
-
-permissions:
-  bash:
-    "npm test*": allow
-    "npm run test*": allow
-    "npm run coverage*": allow
-    "npm audit*": allow
-    "bun test*": allow
-    "bun run test*": allow
-    "pytest*": allow
-    "python -m pytest*": allow
-    "just *": allow
-    "*": deny
-
-tags:
-  - review
-  - quality
-  - security
 ---
 
 <agent_identity>
@@ -177,7 +159,7 @@ Return your review as markdown:
 
 ### Issues
 | File:Line | Severity | Category | Issue | Suggestion |
-|-----------|----------|----------|-------|------------|
+| --------- | -------- | -------- | ----- | ---------- |
 
 ### Summary
 [Brief summary]
