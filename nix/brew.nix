@@ -12,6 +12,9 @@
       # Network & testing tools
       "aria2"
 
+      # Infrastructure/DevOps
+      "tfenv"
+
       # Mobile & platform development
       "xcode-build-server"
       "xcbeautify"

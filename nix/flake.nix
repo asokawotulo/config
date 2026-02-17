@@ -88,7 +88,6 @@
           # Infrastructure & DevOps
           pkgs.awscli2
           pkgs.packer
-          pkgs.terraform
 
           # Network & testing tools
           pkgs.httpie
