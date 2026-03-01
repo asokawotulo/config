@@ -74,6 +74,13 @@ When investigating library-specific questions, use the `btca` tool if resources 
 btca queries the actual git repo source — often more accurate than web search for library internals.
 </btca_integration>
 
+<search-files_integration>
+## search-files - Searching files using ast-grep
+When searching for code patterns, use the `search-files` tool which is meant to replace the `grep` tool.
+
+Load the `ast-grep` skill as this tool uses `ast-grep` under the hood.
+</search-files_integration>
+
 <tasks>
 - **Audit**: "Find all usages of X".
 - **Docs**: "Read the documentation for library Y using Context7 or btca".
