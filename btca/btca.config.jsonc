@@ -1,7 +1,5 @@
 {
   "$schema": "https://btca.dev/btca.schema.json",
-  "provider": "quotio",
-  "model": "gemini-3-flash",
   "resources": [
     {
       "type": "git",
@@ -18,5 +16,7 @@
       "branch": "dev",
       "searchPath": "packages/opencode"
     }
-  ]
+  ],
+  "model": "claude-haiku-4.5",
+  "provider": "github-copilot"
 }

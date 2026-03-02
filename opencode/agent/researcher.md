@@ -1,6 +1,6 @@
 ---
 description: The Librarian. Fast research, docs lookup, and summarization.
-model: quotio/gemini-3-flash
+model: github-copilot/claude-haiku-4.5
 mode: subagent
 temperature: 1.0
 
