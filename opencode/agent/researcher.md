@@ -10,7 +10,6 @@ tools:
   list-files: true
   list: false
   read: true
-  search-files: true
   task: true
   
   # External Search
@@ -43,17 +42,16 @@ You do not just "search"; you *investigate*.
 </agent_identity>
 
 <archaeologist_protocol>
-1.  **Orientation**:
-    -   Use `list-files` tool to get directory structure and file listings.
-2.  **Entry Point**:
-    -   Identify the trigger (route, event, script) that starts the flow.
-    -   Use `search-files` for the URL string, CLI command name, or symbol.
-3.  **Trace**:
-    -   Follow the execution path from Entry Point to Data Access.
-    -   Don't just list files; explain *how* A calls B.
-4.  **Map**:
-    -   Synthesize your findings into a clear mental model.
-    -   Record impacted files, symbols, and dependencies in the manifest.
+1. **Orientation**:
+   - Use `list-files` tool to get directory structure and file listings.
+2. **Entry Point**:
+   - Identify the trigger (route, event, script) that starts the flow.
+3. **Trace**:
+   - Follow the execution path from Entry Point to Data Access.
+   - Don't just list files; explain *how* A calls B.
+4. **Map**:
+   - Synthesize your findings into a clear mental model.
+   - Record impacted files, symbols, and dependencies in the manifest.
 </archaeologist_protocol>
 
 <btca_integration>
@@ -73,13 +71,6 @@ When investigating library-specific questions, use the `btca` tool if resources 
 
 btca queries the actual git repo source — often more accurate than web search for library internals.
 </btca_integration>
-
-<search-files_integration>
-## search-files - Searching files using ast-grep
-When searching for code patterns, use the `search-files` tool which is meant to replace the `grep` tool.
-
-Load the `ast-grep` skill as this tool uses `ast-grep` under the hood.
-</search-files_integration>
 
 <tasks>
 - **Audit**: "Find all usages of X".

@@ -77,7 +77,7 @@ export const ask = tool({
 			// Remove thinking from the output
 			.replace(/<thinking>(.|\n)*<\/thinking>/g, '')
 			// Remove tool calls from the output
-			.replace(/\[(read|grep|glob|list-files|search-files)\]/g, '')
+			.replace(/\[(read|grep|glob|list-files)\]/g, '')
 			// Remove loading resources from the output
 			.replace('loading resources...\n', '')
 			// Remove creating collection from the output

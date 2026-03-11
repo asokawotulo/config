@@ -11,7 +11,6 @@ tools:
   list-files: true
   list: false
   read: true
-  search-files: true
   task: true
   
   # Code Intelligence (Read-only)
