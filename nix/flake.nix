@@ -34,7 +34,10 @@
       home.packages = [];
       programs.home-manager.enable = true;
       # TODO: Find a better way to declare configurations. Ideally, with home manager configuration and type hinting.
-      targets.darwin.defaults = import ./darwin-configuration.nix;
+      targets.darwin = {
+        keybindings = import ./darwin-keybindings.nix;
+        defaults = import ./darwin-defaults.nix;
+      };
     };
 
     configuration = { pkgs, ... }: {
