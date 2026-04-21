@@ -1,8 +1,9 @@
 ---
 description: The Critic. Reviews code, architecture, and security.
-model: opencode/glm-5
+model: openai/gpt-5.4-fast
 mode: subagent
 temperature: 1.0
+reasoningEffort: low
 
 tools:
   bash: true
