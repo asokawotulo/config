@@ -47,12 +47,14 @@ export const add = tool({
 		? "Add a new btca resource from a git URL or local path."
 		: "btca CLI is not installed. Install btca first to use this tool.",
 	args: {
+		name: tool.schema.string().describe("Name of the resource to add."),
 		url: tool.schema.string().describe("Git repository URL or local path to add as a resource."),
+		branch: tool.schema.string().describe("Branch to add as a resource.").optional(),
 	},
-	async execute({ url }) {
+	async execute({ name, url, branch }) {
 		guard();
 
-		const result = await Bun.$`${RECURSION_GUARD_ENV}=1 btca config resources add ${url}`.quiet().nothrow();
+		const result = await Bun.$`${RECURSION_GUARD_ENV}=1 btca config resources add -n ${name} -u ${url} ${branch ? `-b ${branch}` : ""}`.quiet().nothrow();
 
 		return processShellOutput(result);
 	}
