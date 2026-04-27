@@ -67,7 +67,7 @@ export default tool({
           flags.push("-lah");
           break;
         case "tree":
-          return await Bun.$`tree -L ${depth} ${path}`.nothrow().text();
+          return await Bun.$`tree --gitignore -L ${depth} ${path}`.nothrow().text();
       }
 
       return await Bun.$`ls ${flags} ${path}`.nothrow().text();
