@@ -82,6 +82,76 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 
+#compdef pnpm
+###-begin-pnpm-completion-###
+if type compdef &>/dev/null; then
+  _pnpm_completion () {
+    # Function to format completions
+    format_completions() {
+      local -a formatted=()
+      local item desc
+      
+      for item in $@; do        
+        # Handle items with existing descriptions (containing --)
+        if [[ $item == *--* ]]; then
+          formatted+=("\\${item}")
+        else
+          formatted+=("${item}")
+        fi
+      done
+      
+      # Sort and return formatted items
+      print -l "${(i)formatted[@]}"
+    }
+
+    complete_options_or_commands() {
+      local current_word="${words[CURRENT]}"
+
+      local stop_parse_string="--"
+      local stop_parse_index=$words[(Ie)$stop_parse_string]
+
+      local -a formatted
+   	  local formatted=($(format_completions "${reply[@]}"))
+      local type
+
+      # Skip if the last word is --, e.g. "pnpm test -- <something can't complete>"
+      if [[ $stop_parse_index != 0 && $CURRENT > stop_parse_index ]]; then
+        return
+      fi
+
+      if [[ $current_word == -* ]]; then
+        type="options"
+      else
+        type="commands"
+      fi
+
+      _describe $type formatted
+    }
+
+    local reply
+    local si=$IFS
+
+    IFS=$'\n' reply=($(COMP_CWORD="$((CURRENT-1))" COMP_LINE="$BUFFER" COMP_POINT="$CURSOR" SHELL=zsh pnpm completion-server -- "${words[@]}"))
+    IFS=$si
+
+    if [ "$reply" = "__tabtab_complete_files__" ]; then
+      _files
+    else
+      complete_options_or_commands
+    fi
+  }
+  # When called by the Zsh completion system, this will end with
+  # "loadautofunc" when initially autoloaded and "shfunc" later on, otherwise,
+  # the script was "eval"-ed so use "compdef" to register it with the
+  # completion system
+  if [[ $zsh_eval_context == *func ]]; then
+    _pnpm_completion "$@"
+  else
+    compdef _pnpm_completion pnpm
+  fi
+fi
+###-end-pnpm-completion-###
+
 # Bun
 export PATH="/Users/asoka/.bun/bin:$PATH"
 
