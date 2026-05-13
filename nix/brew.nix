@@ -16,6 +16,7 @@
       "tfenv"
 
       # Mobile & platform development
+      "watchman"
       "xcode-build-server"
       "xcbeautify"
 
@@ -48,6 +49,10 @@
       "cursor"
       "ghostty@tip"
       "postman"
+      "zulu@17"
+
+      # Mobile & platform development
+      "android-studio"
 
       # Virtualization & containerization
       "orbstack"
