@@ -48,6 +48,7 @@
       "claude-code"
       "cursor"
       "ghostty@tip"
+      "mitmproxy"
       "postman"
       "zulu@17"
 
