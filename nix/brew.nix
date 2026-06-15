@@ -44,7 +44,6 @@
       "zen"
 
       # Dev environment & tools
-      "antigravity"
       "claude-code"
       "cursor"
       "ghostty@tip"
