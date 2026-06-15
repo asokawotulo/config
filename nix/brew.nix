@@ -44,7 +44,7 @@
       "zen"
 
       # Dev environment & tools
-      "claude-code"
+      "claude-code@latest"
       "cursor"
       "ghostty@tip"
       "mitmproxy"
