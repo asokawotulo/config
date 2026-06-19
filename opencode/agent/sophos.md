@@ -1,7 +1,7 @@
 ---
 description: A "second opinion" agent that double-checks opinions or implementations from the primary agent
-mode: subagent
 model: openai/gpt-5.4
+mode: subagent
 tools:
   write: false
   edit: false

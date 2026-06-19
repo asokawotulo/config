@@ -1,6 +1,6 @@
 ---
 description: The Librarian. Fast research, docs lookup, and summarization.
-model: github-copilot/claude-haiku-4.5
+model: openai/gpt-5.4-fast
 mode: subagent
 temperature: 1.0
 
