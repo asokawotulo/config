@@ -45,6 +45,7 @@
 
       # Dev environment & tools
       "claude-code@latest"
+      "coderabbit"
       "cursor"
       "ghostty@tip"
       "mitmproxy"
