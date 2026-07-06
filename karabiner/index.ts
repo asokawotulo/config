@@ -19,7 +19,8 @@ writeToProfile('Default profile', [
 
   // ! Hyper Layer "o" is for opening apps
   hyperLayer('o', 'HyperLayer - "o"').manipulators([
-    // map('a').toApp('Arc'),
+    map('1').toApp('1Password'),
+    map('2').toApp('Step Two'),
     map('c').toApp('Calendar'),
     map('d').toApp('TablePlus'),
     map('e').toApp('Cursor'),
@@ -28,15 +29,14 @@ writeToProfile('Default profile', [
     map('h').toApp('Core Shell'),
     map('i').toApp('Activity Monitor'),
     map('l').toApp('Slack'),
-    map('n').toApp('Notion'),
     map('m').toApp('Airmail'),
+    map('n').toApp('Notion'),
     map('p').toApp('Postman'),
     map('s').toApp('Safari'),
     map('t').toApp('Ghostty'),
     map('w').toApp('WhatsApp'),
+    map('y').toApp('Supacode'),
     map('z').toApp('Zen'),
-    map('1').toApp('1Password'),
-    map('2').toApp('Step Two'),
   ]),
 
   // ! Hyper Layer "r" is for raycast
