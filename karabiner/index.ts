@@ -30,7 +30,7 @@ writeToProfile('Default profile', [
     map('i').toApp('Activity Monitor'),
     map('l').toApp('Slack'),
     map('m').toApp('Airmail'),
-    map('n').toApp('Notion'),
+    map('n').toApp('Obsidian'),
     map('p').toApp('Postman'),
     map('s').toApp('Safari'),
     map('t').toApp('Ghostty'),
