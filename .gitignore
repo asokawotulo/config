@@ -6,3 +6,7 @@ backup/
 
 # Node modules
 node_modules/
+
+# BTCA
+btca/.keep
+btca/telemetry.json

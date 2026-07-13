@@ -17,6 +17,6 @@
       "searchPath": "packages/opencode"
     }
   ],
-  "model": "claude-haiku-4.5",
-  "provider": "github-copilot"
+  "model": "gpt-5.6-terra",
+  "provider": "openai"
 }
