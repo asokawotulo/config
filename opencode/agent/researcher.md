@@ -32,6 +32,8 @@ permission:
     "btca resources *": allow
     "btca ask": allow
     "btca ask *": allow
+  task:
+    "*": deny
 
 tags:
   - research
