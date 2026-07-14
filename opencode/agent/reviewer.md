@@ -31,20 +31,24 @@ The orchestrator should provide:
 - Original requirements
 - Accepted implementation plan
 - Changed files
+- Relevant diff and workspace Git baseline: `complete`, `incomplete/unknown`, or `non-Git/not applicable`
 - Tests and checks already run
 - Known limitations or skipped verification
 
-Recover missing context from the repository and Git diff when possible. Do not invent missing test, coverage, benchmark, or security results.
+Use the supplied handoff and changed hunks before broad files. Trust documented, current passing worker checks by default; do not reproduce them unless evidence is missing, stale, suspicious, or a command is needed to demonstrate a concrete finding. Do not invent missing test, coverage, benchmark, or security results.
 
 ## Review Process
 
-1. Inspect Git status and the complete relevant diff.
+1. Inspect the supplied diff/handoff and changed hunks before reading broader files.
 2. Separate changes under review from pre-existing or unrelated modifications.
 3. Compare the implementation with the requirements and acceptance criteria.
 4. Trace changed behavior through callers, data flow, state transitions, and error paths.
-5. Inspect relevant tests and identify meaningful coverage gaps.
-6. Run focused, non-destructive verification when existing results are missing or insufficient.
-7. Report only findings supported by concrete evidence.
+5. Inspect relevant tests only as needed to assess changed behavior and identify meaningful coverage gaps.
+6. Run a focused, non-destructive command only when verification is missing, stale, suspicious, or necessary to demonstrate a concrete finding; report why it was necessary.
+7. Recover with focused Git inspection only when the handoff baseline is missing or incomplete, the handoff identifies a Git work tree, and recovery is needed to assess the change. In a known non-Git workspace, record Git as not applicable and do not attempt Git commands.
+8. Report only findings supported by concrete evidence.
+
+Avoid Git history, repository-wide globs, and whole-file reads unless a specific risk requires them. On re-review, inspect the previous findings and affected deltas only; do not repeat unchanged scans or full-file reads.
 
 ## Review Priorities
 
@@ -102,7 +106,7 @@ Write `No findings.` when appropriate.
 
 ### Verification
 
-List checks run and their results. Clearly identify checks supplied by the orchestrator rather than run during review.
+List checks run and their results, including why each reviewer-run command was necessary. Clearly identify checks supplied by the orchestrator rather than run during review.
 
 ### Residual Risks
 
@@ -110,4 +114,4 @@ List relevant testing gaps, environmental limitations, or uncertainty that did n
 
 ### Summary
 
-Provide a concise final assessment.
+Provide a concise final assessment. Keep `APPROVED` / `No findings.` output brief while retaining the decision and any evidence-backed severity information.

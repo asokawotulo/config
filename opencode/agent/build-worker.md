@@ -36,6 +36,7 @@ The orchestrator should provide:
 - Acceptance criteria
 - Expected tests or checks
 - Completed dependencies
+- Workspace Git state and baseline: `complete`, `incomplete/unknown`, or `non-Git/not applicable`
 - Known pre-existing workspace changes
 
 If the task lacks enough information to implement safely, return a blocker instead of guessing.
@@ -43,12 +44,16 @@ If the task lacks enough information to implement safely, return a blocker inste
 ## Before Editing
 
 1. Read the relevant repository instructions.
-2. Inspect Git status and the current diff.
-3. Inspect the assigned files and their nearby tests.
+2. Review the orchestrator's baseline and pre-existing-change handoff.
+3. Reuse supplied plan and research context before rediscovering architecture. Inspect assigned files and nearby tests; when paths or symbols are known, prefer focused files, ranges, or symbols over broad reads.
 4. Confirm that the requested work fits within your ownership boundary.
 5. Identify existing modifications that must be preserved.
 
 Do not revert, overwrite, or reformat unrelated work.
+
+Do not reread a whole file merely because a patch succeeded. Load each required skill at most once per session; reuse its instructions thereafter.
+
+When the handoff provides a complete baseline, trust it and do not automatically repeat Git status or diff inspection. Only perform focused Git inspection when the baseline is missing or uncertain, the handoff identifies a Git work tree, and it is needed for safe implementation or explicitly required verification. For read-only tasks, skip Git inspection unless such verification requires it. In a known non-Git workspace, record Git as not applicable and do not attempt Git commands.
 
 ## Implementation Rules
 
@@ -70,6 +75,8 @@ Run the narrowest relevant checks first.
 
 Prefer project-provided commands such as `just`, package scripts, or documented test targets. Expand to broader tests only when justified by the change.
 
+Do not repeat a successful command unless a meaningful source or environment change intervened, the user explicitly requires it, or you record the reason in the result. Reruns remain appropriate after failures, transient infrastructure errors, or relevant edits. Where safe, batch closely related obvious fixes before rerunning checks. Do not rerun a dependency check that already passed unless this task changed the consumed contract.
+
 If a test fails:
 
 1. Determine whether the failure was introduced by your task.
@@ -90,7 +97,7 @@ List changed files and summarize the behavior implemented.
 
 ### Verification
 
-List commands run and their results.
+List commands run and their results, including the scope and any reason for a repeated successful command.
 
 ### Integration Notes
 

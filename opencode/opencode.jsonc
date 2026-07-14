@@ -14,14 +14,10 @@
 			"color": "secondary"
 		},
 		"plan": {
-			"model": "openai/gpt-5.6-sol",
-			"color": "primary",
-			"permission": {
-				"question": "allow"
-			}
+			"disable": true
 		}
 	},
-	"default_agent": "plan",
+	"default_agent": "planner",
 	"enabled_providers": [
 		"anthropic",
 		"github-copilot",
