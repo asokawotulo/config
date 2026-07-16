@@ -15,6 +15,12 @@
       "url": "https://github.com/anomalyco/opencode",
       "branch": "dev",
       "searchPath": "packages/opencode"
+    },
+    {
+      "type": "git",
+      "name": "supacode",
+      "url": "https://github.com/supabitapp/supacode",
+      "branch": "main"
     }
   ],
   "model": "gpt-5.6-terra",
