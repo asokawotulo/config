@@ -59,11 +59,14 @@ For every task, specify:
 - Task ID and objective
 - Relevant files and symbols
 - Expected behavior
+- One or more concise before/after snippet pairs illustrating the intended delta
 - Acceptance criteria
 - Dependencies on other tasks
 - Focused verification
 - Whether it is safe to run in parallel
 - Files or modules that the task owns
+
+Snippets may cover code, configuration, or documentation. Show focused deltas rather than complete patches, use `(not present)` to make additions or removals unambiguous, and ground syntax in inspected files. If syntax cannot be confirmed, label the snippet `illustrative pseudocode` rather than inventing APIs or file structure.
 
 ## Required Output
 
@@ -85,7 +88,7 @@ State what is included and explicitly excluded.
 
 ### Tasks
 
-Provide ordered, implementation-ready tasks with ownership, dependencies, acceptance criteria, and verification. One task is sufficient for a simple change.
+Provide ordered, implementation-ready tasks with ownership, dependencies, one or more concise before/after snippet pairs illustrating each intended delta, acceptance criteria, and verification. Snippets may cover code, configuration, or documentation; keep them focused rather than full patches, and label unverified syntax as `illustrative pseudocode`. One task is sufficient for a simple change.
 
 ### Parallelization
 
