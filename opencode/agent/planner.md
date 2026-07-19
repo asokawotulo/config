@@ -6,7 +6,12 @@ reasoningEffort: high
 color: primary
 permission:
   edit: deny
-  bash: ask
+  bash:
+    "*": ask
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
   question: allow
   task:
     "*": deny
