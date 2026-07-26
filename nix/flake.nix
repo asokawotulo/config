@@ -122,7 +122,7 @@
       ];
 
       # Import homebrew configuration
-      imports = [ ./brew.nix ];
+      imports = [ ./brew.nix ./external-packages.nix ];
     };
   in
   {
