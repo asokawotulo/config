@@ -28,6 +28,13 @@
 	"experimental": {
 		"disable_paste_summary": true,
 	},
+	"plugin": [
+		"github:firecrawl/opencode-firecrawl#a5a7939005ad67b0a7a03f495aa224f6e9d2bb20"
+	],
+	"permission": {
+		"webfetch": "deny",
+		"websearch": "deny"
+	},
 	"provider": {
 		"quotio": {
 			"npm": "@ai-sdk/anthropic",

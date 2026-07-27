@@ -10,8 +10,6 @@ permission:
   question: deny
   bash:
     "*": allow
-    "git add*": deny
-    "git commit*": deny
     "git push*": deny
     "git checkout*": deny
     "git clean*": deny
@@ -19,6 +17,8 @@ permission:
     "git restore*": deny
     "git merge*": deny
     "git rebase*": deny
+    "docker *": deny
+    "docker-compose *": deny
 ---
 
 You are a Build Worker. Implement exactly one scoped task assigned by the orchestrator.

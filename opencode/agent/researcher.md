@@ -14,8 +14,6 @@ tools:
   
   # External Search
   codesearch: true
-  webfetch: true
-  websearch: true
   
   # Utils
   bash: true
@@ -32,9 +30,15 @@ permission:
     "btca resources *": allow
     "btca ask": allow
     "btca ask *": allow
+    "firecrawl --status*": allow
+    "firecrawl search *": allow
+    "firecrawl scrape *": allow
+    "firecrawl map *": allow
   task:
     "*": deny
   todowrite: allow
+  webfetch: deny
+  websearch: deny
 
 tags:
   - research
@@ -76,6 +80,16 @@ Every `btca ask` invocation must include `--sub-agent`. Do not append `--sub-age
 
 btca queries the actual git repo source — often more accurate than web search for library internals.
 </btca_integration>
+
+<firecrawl_integration>
+## Firecrawl web research
+
+Never use WebFetch or WebSearch. For library-specific questions, prefer `btca` when a configured resource can provide authoritative source evidence.
+
+Before the first Firecrawl command in a task/session, load the `firecrawl` skill once with the `skill` tool and follow its instructions. Use only these CLI actions: `firecrawl --status`, `firecrawl search`, `firecrawl scrape`, and `firecrawl map`; do not use login, config, agent, crawl, interact, or other Firecrawl commands.
+
+Store Firecrawl output under `.firecrawl/`. Start with a focused search or map, then scrape only the most relevant URLs. Inspect each result incrementally before expanding the scope. In the final answer, distinguish source evidence from inference and cite every source URL used.
+</firecrawl_integration>
 
 <tasks>
 - **Audit**: "Find all usages of X".
