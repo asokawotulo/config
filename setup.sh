@@ -76,6 +76,11 @@ echo "Symlinking opencode configuration..."
 mkdir -p "$HOME/.config/opencode"
 backup_and_link "$CONFIG_DIR/opencode" "$HOME/.config/opencode"
 
+# Symlink pi configuration
+echo "Symlinking pi configuration..."
+mkdir -p "$HOME/.config/pi"
+backup_and_link "$CONFIG_DIR/pi" "$HOME/.config/pi"
+
 # Symlink btca configuration
 echo "Symlinking btca configuration..."
 mkdir -p "$HOME/.config/btca"
