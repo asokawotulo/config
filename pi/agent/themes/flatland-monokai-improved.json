@@ -36,7 +36,7 @@
     "text": "text",
     "thinkingText": "softText",
     "selectedBg": "selection",
-    "userMessageBg": "surface",
+    "userMessageBg": "bg",
     "userMessageText": "text",
     "customMessageBg": "surface",
     "customMessageText": "text",
