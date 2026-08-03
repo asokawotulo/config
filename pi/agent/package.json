@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "bun test extensions/ask-user extensions/firecrawl extensions/custom-markdown-code-blocks"
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
