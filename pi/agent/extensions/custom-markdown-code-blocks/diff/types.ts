@@ -1,6 +1,12 @@
+export type DiffByteRange = {
+  start: number;
+  end: number;
+};
+
 export type DiffCell = {
   marker: " " | "+" | "-";
   text: string;
+  changedBytes?: readonly DiffByteRange[];
 };
 
 export type DiffRow =

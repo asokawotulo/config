@@ -11,6 +11,7 @@ import {
 } from "./theme.ts";
 
 const identity = (text: string) => text;
+const stripAnsi = (text: string) => text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
 const markdownTheme = {
   heading: identity,
   link: identity,
@@ -57,8 +58,8 @@ describe("side-by-side diff code block", () => {
       },
       {
         type: "pair",
-        before: { marker: "-", text: "old one" },
-        after: { marker: "+", text: "new one" },
+        before: { marker: "-", text: "old one", changedBytes: [{ start: 0, end: 3 }] },
+        after: { marker: "+", text: "new one", changedBytes: [{ start: 0, end: 3 }] },
       },
       {
         type: "pair",
@@ -69,6 +70,94 @@ describe("side-by-side diff code block", () => {
         type: "pair",
         before: { marker: " ", text: "tail" },
         after: { marker: " ", text: "tail" },
+      },
+    ]);
+  });
+
+  test("aligns expanded statements and inserted blocks by line similarity", () => {
+    const rows = alignUnifiedDiff(
+      " export async function request(input: RequestInfo) {\n" +
+        "-  const response = await fetch(input);\n" +
+        "-  return response.json();\n" +
+        "+  const response = await fetch(input, {\n" +
+        "+    signal: AbortSignal.timeout(5_000),\n" +
+        "+  });\n" +
+        "+\n" +
+        "+  if (!response.ok) {\n" +
+        "+    throw new HttpError(response.status);\n" +
+        "+  }\n" +
+        "+\n" +
+        "+  return response.json() as Promise<ApiResponse>;\n" +
+        " }",
+    );
+
+    expect(rows[1]).toEqual({
+      type: "pair",
+      before: {
+        marker: "-",
+        text: "  const response = await fetch(input);",
+        changedBytes: [{ start: 36, end: 38 }],
+      },
+      after: {
+        marker: "+",
+        text: "  const response = await fetch(input, {",
+        changedBytes: [{ start: 36, end: 39 }],
+      },
+    });
+    expect(rows.slice(2, 9).every((row) => row.type === "pair" && row.before.text === "")).toBe(
+      true,
+    );
+    expect(rows[9]).toEqual({
+      type: "pair",
+      before: {
+        marker: "-",
+        text: "  return response.json();",
+        changedBytes: [],
+      },
+      after: {
+        marker: "+",
+        text: "  return response.json() as Promise<ApiResponse>;",
+        changedBytes: [{ start: 24, end: 48 }],
+      },
+    });
+  });
+
+  test("keeps byte ranges on UTF-8 character boundaries", () => {
+    expect(alignUnifiedDiff("-café\n+cafè")).toEqual([
+      {
+        type: "pair",
+        before: { marker: "-", text: "café", changedBytes: [{ start: 3, end: 5 }] },
+        after: { marker: "+", text: "cafè", changedBytes: [{ start: 3, end: 5 }] },
+      },
+    ]);
+  });
+
+  test("keeps unrelated one-to-one replacements paired", () => {
+    expect(alignUnifiedDiff("-alpha\n+XYZ")).toEqual([
+      {
+        type: "pair",
+        before: {
+          marker: "-",
+          text: "alpha",
+          changedBytes: [{ start: 0, end: 5 }],
+        },
+        after: {
+          marker: "+",
+          text: "XYZ",
+          changedBytes: [{ start: 0, end: 3 }],
+        },
+      },
+    ]);
+  });
+
+  test("falls back to whole-line ranges when an intra-line diff exceeds its bound", () => {
+    const before = "a".repeat(600);
+    const after = "b".repeat(600);
+    expect(alignUnifiedDiff(`-${before}\n+${after}`)).toEqual([
+      {
+        type: "pair",
+        before: { marker: "-", text: before, changedBytes: [{ start: 0, end: 600 }] },
+        after: { marker: "+", text: after, changedBytes: [{ start: 0, end: 600 }] },
       },
     ]);
   });
@@ -110,14 +199,92 @@ describe("side-by-side diff code block", () => {
 
     expect(lines.some((line) => line.includes("Before") && line.includes("After"))).toBe(true);
     expect(
-      lines.some(
-        (line) =>
-          line.includes("- const mode = 'old';") && line.includes("+ const mode = 'new';"),
-      ),
+      lines.some((line) => {
+        const visibleLine = stripAnsi(line);
+        return (
+          visibleLine.includes("- const mode = 'old';") &&
+          visibleLine.includes("+ const mode = 'new';")
+        );
+      }),
     ).toBe(true);
     expect(lines.some((line) => line.includes("\x1b[48;2;53;28;36m"))).toBe(true);
     expect(lines.some((line) => line.includes("\x1b[48;2;31;48;29m"))).toBe(true);
     expect(lines.every((line) => visibleWidth(line) <= 100)).toBe(true);
+  });
+
+  test("restores full-pane backgrounds for unpaired changes", () => {
+    installDiffRenderer();
+    const lines = new Markdown(
+      "```diff\n-removed\n unchanged\n+inserted\n+\n```",
+      1,
+      0,
+      markdownTheme,
+    ).render(100);
+    const removedBackground = "\x1b[48;2;53;28;36m";
+    const addedBackground = "\x1b[48;2;31;48;29m";
+
+    const removedLine = lines.find((line) => stripAnsi(line).includes("- removed"));
+    const insertedLine = lines.find((line) => stripAnsi(line).includes("+ inserted"));
+    expect(removedLine).toBeDefined();
+    expect(insertedLine).toBeDefined();
+
+    const removedCell = removedLine!.slice(
+      removedLine!.indexOf(removedBackground) + removedBackground.length,
+      removedLine!.indexOf("\x1b[49m", removedLine!.indexOf(removedBackground)),
+    );
+    const addedCell = insertedLine!.slice(
+      insertedLine!.indexOf(addedBackground) + addedBackground.length,
+      insertedLine!.indexOf("\x1b[49m", insertedLine!.indexOf(addedBackground)),
+    );
+    expect(stripAnsi(removedCell)).toStartWith("- removed");
+    expect(stripAnsi(addedCell)).toStartWith("+ inserted");
+    expect(visibleWidth(removedCell)).toBe(45);
+    expect(visibleWidth(addedCell)).toBe(46);
+
+    const addedCells = lines.filter((line) => line.includes(addedBackground));
+    expect(addedCells).toHaveLength(2);
+  });
+
+  test("backgrounds only changed bytes on aligned lines", () => {
+    installDiffRenderer();
+    const lines = new Markdown(
+      "```diff\n-  const response = await fetch(input);\n+  const response = await fetch(input, {\n```",
+      1,
+      0,
+      markdownTheme,
+    ).render(100);
+
+    const changedLine = lines.find((line) => stripAnsi(line).includes("fetch(input);"));
+    expect(changedLine).toBeDefined();
+    expect(changedLine!.indexOf("fetch(input")).toBeLessThan(
+      changedLine!.indexOf("\x1b[48;2;53;28;36m"),
+    );
+    expect(changedLine!.indexOf("fetch(input", changedLine!.indexOf(" │ "))).toBeLessThan(
+      changedLine!.indexOf("\x1b[48;2;31;48;29m"),
+    );
+  });
+
+  test("preserves syntax ANSI while applying partial byte backgrounds", () => {
+    installDiffRenderer();
+    const exactHighlightTheme = {
+      ...markdownTheme,
+      highlightCode: (code: string) =>
+        code.split("\n").map((line) => `\x1b[35m${line}\x1b[0m`),
+    };
+    const lines = new Markdown(
+      "```diff:typescript\n-const mode = 'old';\n+const mode = 'new';\n```",
+      1,
+      0,
+      exactHighlightTheme,
+    ).render(100);
+
+    const changedLine = lines.find((line) => stripAnsi(line).includes("const mode = 'old';"));
+    expect(changedLine).toBeDefined();
+    expect(changedLine).toContain("\x1b[35mconst mode = '");
+    expect(changedLine!.indexOf("const mode = '")).toBeLessThan(
+      changedLine!.indexOf("\x1b[48;2;53;28;36m"),
+    );
+    expect(changedLine).toContain("\x1b[0m");
   });
 
   test("inherits syntax highlighting without coloring context backgrounds", () => {
