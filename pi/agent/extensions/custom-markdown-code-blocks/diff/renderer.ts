@@ -1,7 +1,14 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { CodeBlockRenderContext } from "../types.ts";
-import type { DiffCell, DiffRow } from "./types.ts";
+import { applyDiffBackground } from "./theme.ts";
+import type {
+  DiffBackgroundColorKey,
+  DiffCell,
+  DiffRow,
+  DiffSourceRow,
+  HighlightedDiffPair,
+} from "./types.ts";
 
 const MIN_SIDE_BY_SIDE_WIDTH = 72;
 
@@ -101,16 +108,92 @@ function fillLabel(label: string, width: number): string {
   return value + "─".repeat(width - visibleWidth(value));
 }
 
-function styleCell(cell: DiffCell, theme?: Theme): string {
-  const value = `${cell.marker} ${cell.text}`;
-  if (!theme) return value;
-  if (cell.marker === "-") return theme.fg("toolDiffRemoved", value);
-  if (cell.marker === "+") return theme.fg("toolDiffAdded", value);
-  return theme.fg("toolDiffContext", value);
+function highlightDiffRows(
+  rows: readonly DiffRow[],
+  inheritedLanguage: string | undefined,
+  highlightCode: CodeBlockRenderContext["highlightCode"],
+): ReadonlyMap<number, HighlightedDiffPair> {
+  if (!inheritedLanguage || !highlightCode) return new Map();
+
+  const highlighted = new Map<number, HighlightedDiffPair>();
+  for (let index = 0; index < rows.length; ) {
+    if (rows[index]?.type === "meta") {
+      index++;
+      continue;
+    }
+
+    const segment: DiffSourceRow[] = [];
+    while (index < rows.length && rows[index]?.type === "pair") {
+      const row = rows[index];
+      if (row?.type === "pair") {
+        segment.push({ index, before: row.before.text, after: row.after.text });
+      }
+      index++;
+    }
+
+    const beforeLines = highlightCode(
+      segment.map((row) => row.before).join("\n"),
+      inheritedLanguage,
+    );
+    const afterLines = highlightCode(
+      segment.map((row) => row.after).join("\n"),
+      inheritedLanguage,
+    );
+    for (let segmentIndex = 0; segmentIndex < segment.length; segmentIndex++) {
+      const row = segment[segmentIndex]!;
+      highlighted.set(row.index, {
+        before: beforeLines[segmentIndex] ?? row.before,
+        after: afterLines[segmentIndex] ?? row.after,
+      });
+    }
+  }
+  return highlighted;
+}
+
+function backgroundKeyForCell(cell: DiffCell): DiffBackgroundColorKey | undefined {
+  if (cell.marker === "-") return "toolDiffRemovedBg";
+  if (cell.marker === "+") return "toolDiffAddedBg";
+  return undefined;
+}
+
+function renderDiffCell(
+  cell: DiffCell,
+  highlightedText: string | undefined,
+  width: number,
+  theme?: Theme,
+): string {
+  let value: string;
+  if (highlightedText !== undefined) {
+    const marker = !theme
+      ? cell.marker
+      : cell.marker === "-"
+        ? theme.fg("toolDiffRemoved", cell.marker)
+        : cell.marker === "+"
+          ? theme.fg("toolDiffAdded", cell.marker)
+          : theme.fg("toolDiffContext", cell.marker);
+    value = `${marker} ${highlightedText}`;
+  } else {
+    value = `${cell.marker} ${cell.text}`;
+    if (theme) {
+      const color =
+        cell.marker === "-"
+          ? "toolDiffRemoved"
+          : cell.marker === "+"
+            ? "toolDiffAdded"
+            : "toolDiffContext";
+      value = theme.fg(color, value);
+    }
+  }
+
+  const padded = padToWidth(value, width);
+  const backgroundKey = backgroundKeyForCell(cell);
+  return theme && backgroundKey ? applyDiffBackground(theme, backgroundKey, padded) : padded;
 }
 
 export function renderSideBySideDiff({
   code,
+  inheritedLanguage,
+  highlightCode,
   width,
   paddingX,
   theme,
@@ -124,6 +207,8 @@ export function renderSideBySideDiff({
   const margin = " ".repeat(paddingX);
   const border = (value: string) => theme?.fg("mdCodeBlockBorder", value) ?? value;
   const lines: string[] = [];
+  const rows = alignUnifiedDiff(code);
+  const highlightedRows = highlightDiffRows(rows, inheritedLanguage, highlightCode);
 
   lines.push(
     margin +
@@ -131,7 +216,8 @@ export function renderSideBySideDiff({
       margin,
   );
 
-  for (const row of alignUnifiedDiff(code)) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex]!;
     if (row.type === "meta") {
       const metadata = theme?.fg("muted", row.text) ?? row.text;
       lines.push(
@@ -143,9 +229,19 @@ export function renderSideBySideDiff({
     lines.push(
       margin +
         border("│ ") +
-        padToWidth(styleCell(row.before, theme), beforeWidth) +
+        renderDiffCell(
+          row.before,
+          highlightedRows.get(rowIndex)?.before,
+          beforeWidth,
+          theme,
+        ) +
         border(" │ ") +
-        padToWidth(styleCell(row.after, theme), afterWidth) +
+        renderDiffCell(
+          row.after,
+          highlightedRows.get(rowIndex)?.after,
+          afterWidth,
+          theme,
+        ) +
         border(" │") +
         margin,
     );

@@ -4,10 +4,10 @@ Adds streaming custom fenced-code renderers to Pi's Markdown transcript. Each re
 
 ## Diff
 
-The built-in custom renderer displays `diff` fences as responsive Before/After panes:
+The built-in custom renderer displays `diff` fences as responsive Before/After panes. Add an inherited language after a colon to preserve Pi's normal syntax highlighting:
 
 ````markdown
-```diff
+```diff:typescript
  export const config = {
 -  timeout: 1_000,
 +  timeout: 5_000,
@@ -16,7 +16,18 @@ The built-in custom renderer displays `diff` fences as responsive Before/After p
 ```
 ````
 
-At fewer than 72 content columns, the renderer delegates back to Pi's normal unified code-block rendering. Replacement runs are aligned by position; this is intended for focused planning snippets rather than a semantic diff viewer.
+Plain `diff` fences retain normal diff foreground colors. In `diff:<language>` fences, source text uses the inherited language's syntax colors while `+` and `-` markers retain diff colors. Unsupported languages fall back safely to Pi's normal code-block foreground.
+
+Changed cells use two extension-consumed values from the active user theme:
+
+```json
+"toolDiffAddedBg": "#1f301d",
+"toolDiffRemovedBg": "#351c24"
+```
+
+These values are accepted by Pi's theme loader but are not native `ThemeBg` tokens. The extension converts their foreground ANSI representation into a background. If a theme omits them, additions use `toolSuccessBg` and removals use `toolErrorBg`.
+
+At fewer than 72 content columns, the renderer delegates back to Pi's normal unified `diff` rendering. Replacement runs are aligned by position; this is intended for focused planning snippets rather than a semantic diff viewer.
 
 ## Adding a renderer
 

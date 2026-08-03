@@ -6,6 +6,7 @@ import type {
   MarkdownSection,
   OriginalRender,
   PatchState,
+  ResolvedCodeBlockLanguage,
   ThemeSetter,
 } from "./types.ts";
 
@@ -25,6 +26,20 @@ function createRendererMap(
   return byLanguage;
 }
 
+export function resolveCodeBlockLanguage(
+  infoString: string,
+  registeredLanguages: ReadonlySet<string>,
+): ResolvedCodeBlockLanguage | undefined {
+  const normalized = infoString.toLowerCase();
+  if (registeredLanguages.has(normalized)) return { language: normalized };
+
+  const parts = normalized.split(":");
+  if (parts.length !== 2) return undefined;
+  const [language, inheritedLanguage] = parts;
+  if (!language || !inheritedLanguage || !registeredLanguages.has(language)) return undefined;
+  return { language, inheritedLanguage };
+}
+
 export function splitMarkdownCodeBlockSections(
   text: string,
   registeredLanguages: ReadonlySet<string>,
@@ -35,8 +50,10 @@ export function splitMarkdownCodeBlockSections(
 
   for (let index = 0; index < lines.length; index++) {
     const opening = /^( {0,3})(`{3,}|~{3,})\s*([^\s`]*)\s*$/.exec(lines[index] ?? "");
-    const language = (opening?.[3] ?? "").toLowerCase();
-    if (!opening || !registeredLanguages.has(language)) continue;
+    const resolvedLanguage = resolveCodeBlockLanguage(opening?.[3] ?? "", registeredLanguages);
+    if (!opening || !resolvedLanguage) continue;
+
+    const { language, inheritedLanguage } = resolvedLanguage;
 
     if (index > markdownStart) {
       sections.push({ type: "markdown", text: lines.slice(markdownStart, index).join("\n") });
@@ -56,6 +73,7 @@ export function splitMarkdownCodeBlockSections(
       type: "codeBlock",
       code: lines.slice(index + 1, closingIndex).join("\n"),
       language,
+      ...(inheritedLanguage ? { inheritedLanguage } : {}),
       closed: closingIndex < lines.length,
     });
 
@@ -103,6 +121,57 @@ function renderOriginalCodeBlock(
   return renderOriginalSection(state, source, `\`\`\`${language}\n${code}\n\`\`\``, width);
 }
 
+function patchedMarkdownRender(this: Markdown, width: number): string[] {
+  const source = this as unknown as MarkdownInternals;
+  const currentState = (Markdown.prototype as Markdown & { [PATCH_STATE]?: PatchState })[
+    PATCH_STATE
+  ];
+  if (!currentState) throw new Error("Custom Markdown code block patch state is unavailable");
+
+  const sections = splitMarkdownCodeBlockSections(
+    source.text,
+    new Set(currentState.renderers.keys()),
+  );
+  if (!sections.some((section) => section.type === "codeBlock")) {
+    return currentState.originalRender.call(this, width);
+  }
+
+  const rendered: string[] = [];
+  const emptyLine = " ".repeat(width);
+  for (let index = 0; index < source.paddingY; index++) rendered.push(emptyLine);
+
+  for (const section of sections) {
+    if (section.type === "markdown") {
+      rendered.push(...renderOriginalSection(currentState, source, section.text, width));
+      continue;
+    }
+
+    const renderer = currentState.renderers.get(section.language);
+    const customLines = renderer?.render({
+      code: section.code,
+      language: section.language,
+      inheritedLanguage: section.inheritedLanguage,
+      highlightCode: source.theme.highlightCode,
+      width,
+      paddingX: source.paddingX,
+      theme: currentState.theme,
+    });
+    rendered.push(
+      ...(customLines ??
+        renderOriginalCodeBlock(
+          currentState,
+          source,
+          section.code,
+          section.language,
+          width,
+        )),
+    );
+  }
+
+  for (let index = 0; index < source.paddingY; index++) rendered.push(emptyLine);
+  return rendered.length > 0 ? rendered : [""];
+}
+
 export function installCustomMarkdownCodeBlocks(
   renderers: readonly CustomCodeBlockRenderer[],
 ): ThemeSetter {
@@ -116,56 +185,13 @@ export function installCustomMarkdownCodeBlocks(
       renderers: rendererMap,
     };
     prototype[PATCH_STATE] = state;
-
-    Markdown.prototype.render = function patchedMarkdownRender(width: number): string[] {
-      const source = this as unknown as MarkdownInternals;
-      const currentState = (Markdown.prototype as Markdown & { [PATCH_STATE]?: PatchState })[PATCH_STATE];
-      if (!currentState) return state!.originalRender.call(this, width);
-
-      const sections = splitMarkdownCodeBlockSections(
-        source.text,
-        new Set(currentState.renderers.keys()),
-      );
-      if (!sections.some((section) => section.type === "codeBlock")) {
-        return currentState.originalRender.call(this, width);
-      }
-
-      const rendered: string[] = [];
-      const emptyLine = " ".repeat(width);
-      for (let index = 0; index < source.paddingY; index++) rendered.push(emptyLine);
-
-      for (const section of sections) {
-        if (section.type === "markdown") {
-          rendered.push(...renderOriginalSection(currentState, source, section.text, width));
-          continue;
-        }
-
-        const renderer = currentState.renderers.get(section.language);
-        const customLines = renderer?.render({
-          code: section.code,
-          language: section.language,
-          width,
-          paddingX: source.paddingX,
-          theme: currentState.theme,
-        });
-        rendered.push(
-          ...(customLines ??
-            renderOriginalCodeBlock(
-              currentState,
-              source,
-              section.code,
-              section.language,
-              width,
-            )),
-        );
-      }
-
-      for (let index = 0; index < source.paddingY; index++) rendered.push(emptyLine);
-      return rendered.length > 0 ? rendered : [""];
-    };
   } else {
     state.renderers = rendererMap;
   }
+
+  // Reassign the wrapper on every install so /reload picks up framework code
+  // changes without wrapping the previous implementation.
+  Markdown.prototype.render = patchedMarkdownRender;
 
   return (theme: Theme) => {
     state!.theme = theme;

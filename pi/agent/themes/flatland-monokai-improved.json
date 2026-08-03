@@ -59,6 +59,8 @@
     "toolDiffAdded": "green",
     "toolDiffRemoved": "pink",
     "toolDiffContext": "muted",
+    "toolDiffAddedBg": "#1f301d",
+    "toolDiffRemovedBg": "#351c24",
     "syntaxComment": "muted",
     "syntaxKeyword": "pink",
     "syntaxFunction": "green",

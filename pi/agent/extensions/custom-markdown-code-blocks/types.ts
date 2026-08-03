@@ -17,13 +17,26 @@ export type MarkdownInternals = {
   options: MarkdownOptions;
 };
 
+export type ResolvedCodeBlockLanguage = {
+  language: string;
+  inheritedLanguage?: string;
+};
+
 export type MarkdownSection =
   | { type: "markdown"; text: string }
-  | { type: "codeBlock"; code: string; language: string; closed: boolean };
+  | {
+      type: "codeBlock";
+      code: string;
+      language: string;
+      inheritedLanguage?: string;
+      closed: boolean;
+    };
 
 export type CodeBlockRenderContext = {
   code: string;
   language: string;
+  inheritedLanguage?: string;
+  highlightCode?: MarkdownTheme["highlightCode"];
   width: number;
   paddingX: number;
   theme?: Theme;

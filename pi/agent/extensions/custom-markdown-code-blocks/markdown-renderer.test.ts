@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Markdown } from "@earendil-works/pi-tui";
-import { installCustomMarkdownCodeBlocks, splitMarkdownCodeBlockSections } from "./markdown-renderer.ts";
+import {
+  installCustomMarkdownCodeBlocks,
+  resolveCodeBlockLanguage,
+  splitMarkdownCodeBlockSections,
+} from "./markdown-renderer.ts";
 import type { CustomCodeBlockRenderer } from "./types.ts";
 
 const identity = (text: string) => text;
@@ -27,6 +31,18 @@ const noticeRenderer: CustomCodeBlockRenderer = {
 };
 
 describe("custom Markdown code block framework", () => {
+  test("resolves exact and inherited languages without claiming malformed variants", () => {
+    const languages = new Set(["diff"]);
+    expect(resolveCodeBlockLanguage("diff", languages)).toEqual({ language: "diff" });
+    expect(resolveCodeBlockLanguage("DIFF:TypeScript", languages)).toEqual({
+      language: "diff",
+      inheritedLanguage: "typescript",
+    });
+    expect(resolveCodeBlockLanguage("diff:", languages)).toBeUndefined();
+    expect(resolveCodeBlockLanguage("diff:typescript:extra", languages)).toBeUndefined();
+    expect(resolveCodeBlockLanguage("unknown:typescript", languages)).toBeUndefined();
+  });
+
   test("splits registered closed and streaming fences from surrounding Markdown", () => {
     const languages = new Set(["notice"]);
     expect(splitMarkdownCodeBlockSections("Before\n\n```notice\nhello\n```\n\nAfter", languages)).toEqual([
@@ -36,6 +52,15 @@ describe("custom Markdown code block framework", () => {
     ]);
     expect(splitMarkdownCodeBlockSections("```notice\npartial", languages)).toEqual([
       { type: "codeBlock", code: "partial", language: "notice", closed: false },
+    ]);
+    expect(splitMarkdownCodeBlockSections("```notice:typescript\npartial", languages)).toEqual([
+      {
+        type: "codeBlock",
+        code: "partial",
+        language: "notice",
+        inheritedLanguage: "typescript",
+        closed: false,
+      },
     ]);
   });
 
@@ -69,12 +94,16 @@ describe("custom Markdown code block framework", () => {
     expect(lines.some((line) => line.includes("hello"))).toBe(true);
   });
 
-  test("reuses one prototype patch while refreshing the renderer registry", () => {
+  test("replaces a stale wrapper while preserving state and refreshing the registry", () => {
     installCustomMarkdownCodeBlocks([noticeRenderer]);
-    const patchedRender = Markdown.prototype.render;
+    const staleRender = function staleRender(): string[] {
+      return ["stale"];
+    };
+    Markdown.prototype.render = staleRender;
+
     installCustomMarkdownCodeBlocks([{ language: "other", render: ({ code }) => [`other: ${code}`] }]);
 
-    expect(Markdown.prototype.render).toBe(patchedRender);
+    expect(Markdown.prototype.render).not.toBe(staleRender);
     const lines = new Markdown("```other\nvalue\n```", 0, 0, markdownTheme).render(80);
     expect(lines).toContain("other: value");
   });
