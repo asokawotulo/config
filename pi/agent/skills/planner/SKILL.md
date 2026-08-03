@@ -45,94 +45,9 @@ For every task, specify:
 
 Identify shared files, contracts, schemas, migrations, manifests, generated files, and lockfiles that require serialized work.
 
-## Before/After Diff Format
+## Before/After Snippets
 
-Express every Before/After snippet as a focused unified `diff` fence. Pi renders these fences as responsive side-by-side panes while the response streams.
-
-When a verified repository-relative file path is available, use this structure:
-
-````markdown
-`some/file/path.js`:
-
-- Optional concise description of the change
-
-```diff
- export const config = {
--  timeout: 1_000,
-+  timeout: 5_000,
-   retries: 3,
- };
-```
-````
-
-Path and description rules:
-
-- Put the file path alone in inline code followed by a colon.
-- Leave one blank line after the path.
-- Add a short bullet list only when it provides useful context beyond the diff.
-- Leave one blank line between the bullets and the diff.
-- Omit the path for conceptual changes or unresolved new-file locations. Never invent a path or line number.
-- Identify the relevant symbol in a description bullet when that makes the location clearer.
-
-Diff rules:
-
-- Put the current form on `-` lines and the intended form on `+` lines.
-- Keep short unchanged excerpts from the existing file on lines beginning with one space.
-- Keep replacement runs adjacent so corresponding lines align across the panes.
-- For an addition, use `- (not present)` followed by the proposed `+` line.
-- For a removal, show the current `-` line followed by `+ (removed)`.
-- Show focused deltas, not complete patches or large files.
-- Ground syntax in inspected files. If it cannot be confirmed, label the snippet `illustrative pseudocode` immediately before the fence.
-- Do not use a tool to emit the diff. Include it directly in the streamed Markdown response.
-
-### Addition and Removal Examples
-
-````markdown
-`src/config.ts`:
-
-- Introduce a shared timeout constant.
-
-```diff
-- (not present)
-+export const DEFAULT_TIMEOUT = 5_000;
-```
-````
-
-````markdown
-`src/legacy.ts`:
-
-```diff
--export const LEGACY_TIMEOUT = 1_000;
-+(removed)
-```
-````
-
-### More Complicated Example
-
-Use enough existing context to locate a multi-line change while keeping the excerpt short:
-
-````markdown
-`src/client.ts`:
-
-- Add request timeouts and typed HTTP error handling.
-- Preserve the existing JSON response flow in `request`.
-
-```diff
- export async function request(input: RequestInfo) {
--  const response = await fetch(input);
--  return response.json();
-+  const response = await fetch(input, {
-+    signal: AbortSignal.timeout(5_000),
-+  });
-+
-+  if (!response.ok) {
-+    throw new HttpError(response.status);
-+  }
-+
-+  return response.json() as Promise<ApiResponse>;
- }
-```
-````
+Before drafting the plan, find and load the skill named `diff`. Follow its standard format, rules, and examples for every Before/After snippet.
 
 ## Required Output
 
