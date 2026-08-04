@@ -12,9 +12,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.83.0",
-    "@earendil-works/pi-coding-agent": "^0.83.0",
-    "@earendil-works/pi-tui": "^0.83.0",
+    "@earendil-works/pi-ai": "0.83.0",
+    "@earendil-works/pi-coding-agent": "0.83.0",
+    "@earendil-works/pi-tui": "0.83.0",
     "diff": "8.0.4",
     "effect": "^4.0.0-beta.99",
     "firecrawl": "^4.30.1",
