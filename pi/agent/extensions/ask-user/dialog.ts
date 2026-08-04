@@ -1,6 +1,9 @@
-import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionContext,
+  KeybindingsManager,
+  Theme,
+} from "@earendil-works/pi-coding-agent";
 import {
-  type Component,
   Editor,
   type EditorTheme,
   type Focusable,
@@ -8,26 +11,30 @@ import {
   matchesKey,
   type TUI,
 } from "@earendil-works/pi-tui";
+import {
+  centeredDialogOverlay,
+  DialogComponent,
+} from "../../shared/ui/index.ts";
 import { renderQuestionnaire } from "./render.ts";
 import { DialogSettler, QuestionnaireState } from "./state.ts";
 import type { DialogResult, Question, QuestionnaireCommand } from "./types.ts";
 
-class QuestionnaireDialog implements Component, Focusable {
+class QuestionnaireDialog extends DialogComponent implements Focusable {
   focused = false;
 
-  private cachedWidth?: number;
-  private cachedLines?: string[];
   private readonly editor: Editor;
   private readonly state: QuestionnaireState;
   private readonly settler: DialogSettler;
 
   constructor(
-    private readonly tui: TUI,
-    private readonly theme: Theme,
+    tui: TUI,
+    theme: Theme,
+    keybindings: KeybindingsManager,
     questions: Question[],
     signal: AbortSignal | undefined,
     done: (result: DialogResult) => void,
   ) {
+    super(tui, theme, keybindings);
     this.state = new QuestionnaireState(questions);
     this.settler = new DialogSettler(signal, done);
 
@@ -49,12 +56,6 @@ class QuestionnaireDialog implements Component, Focusable {
     };
   }
 
-  private refresh() {
-    this.cachedWidth = undefined;
-    this.cachedLines = undefined;
-    this.tui.requestRender();
-  }
-
   private openEditor() {
     this.editor.setText(this.state.customDraft ?? "");
     this.editor.focused = this.focused;
@@ -67,19 +68,19 @@ class QuestionnaireDialog implements Component, Focusable {
   }
 
   private commandFor(data: string): QuestionnaireCommand | undefined {
-    if (matchesKey(data, Key.up)) return "up";
-    if (matchesKey(data, Key.down)) return "down";
+    if (this.matchesBinding(data, "tui.select.up")) return "up";
+    if (this.matchesBinding(data, "tui.select.down")) return "down";
     if (matchesKey(data, Key.left)) return "left";
     if (matchesKey(data, Key.right)) return "right";
-    if (matchesKey(data, Key.enter)) return "enter";
+    if (this.matchesBinding(data, "tui.select.confirm")) return "enter";
     if (matchesKey(data, Key.space)) return "space";
-    if (matchesKey(data, Key.escape)) return "escape";
+    if (this.matchesBinding(data, "tui.select.cancel")) return "escape";
     return undefined;
   }
 
   handleInput(data: string) {
     if (this.state.editQuestionIndex !== undefined) {
-      if (matchesKey(data, Key.escape)) {
+      if (this.matchesBinding(data, "tui.select.cancel")) {
         this.state.handle("escape");
         this.closeEditor();
         this.refresh();
@@ -108,9 +109,8 @@ class QuestionnaireDialog implements Component, Focusable {
     if (transition === "changed") this.refresh();
   }
 
-  render(width: number) {
-    if (this.cachedLines && this.cachedWidth === width) return this.cachedLines;
-    this.cachedLines = renderQuestionnaire(
+  protected renderContent(width: number) {
+    return renderQuestionnaire(
       {
         questions: this.state.questions,
         answers: this.state.answers,
@@ -121,14 +121,12 @@ class QuestionnaireDialog implements Component, Focusable {
       },
       this.theme,
       width,
+      this.keybindings,
     );
-    this.cachedWidth = width;
-    return this.cachedLines;
   }
 
-  invalidate() {
-    this.cachedWidth = undefined;
-    this.cachedLines = undefined;
+  override invalidate() {
+    super.invalidate();
     this.editor.invalidate();
   }
 
@@ -143,17 +141,22 @@ export function showQuestionnaire(
   signal?: AbortSignal,
 ) {
   return ctx.ui.custom<DialogResult>(
-    (tui, theme, _keybindings, done) =>
-      new QuestionnaireDialog(tui, theme, questions, signal, done),
+    (tui, theme, keybindings, done) =>
+      new QuestionnaireDialog(
+        tui,
+        theme,
+        keybindings,
+        questions,
+        signal,
+        done,
+      ),
     {
       overlay: true,
-      overlayOptions: {
+      overlayOptions: centeredDialogOverlay({
         width: "75%",
         minWidth: 40,
         maxHeight: "90%",
-        anchor: "center",
-        margin: 1,
-      },
+      }),
     },
   );
 }

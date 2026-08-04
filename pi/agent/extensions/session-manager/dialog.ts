@@ -1,17 +1,22 @@
 import { resolve } from "node:path";
 import type {
   ExtensionContext,
+  KeybindingsManager,
   SessionInfo,
   Theme,
 } from "@earendil-works/pi-coding-agent";
 import {
-  Key,
   matchesKey,
   truncateToWidth,
   visibleWidth,
-  type Component,
   type TUI,
 } from "@earendil-works/pi-tui";
+import {
+  centeredDialogOverlay,
+  DialogComponent,
+  keybindingHint,
+  renderDialogFrame,
+} from "../../shared/ui/index.ts";
 import { DELETE_WINDOW_MS, SessionManagerState } from "./state.ts";
 import type { SessionManagerAction } from "./types.ts";
 
@@ -63,29 +68,23 @@ function samePath(left: string | undefined, right: string): boolean {
   return left !== undefined && resolve(left) === resolve(right);
 }
 
-class SessionManagerDialog implements Component {
+class SessionManagerDialog extends DialogComponent {
   private readonly state: SessionManagerState;
   private timer?: ReturnType<typeof setTimeout>;
   private status?: { type: "warning" | "error"; text: string };
-  private cachedWidth?: number;
-  private cachedLines?: string[];
 
   constructor(
-    private readonly tui: TUI,
-    private readonly theme: Theme,
+    tui: TUI,
+    theme: Theme,
+    keybindings: KeybindingsManager,
     private readonly sessions: SessionInfo[],
     private readonly currentSessionPath: string | undefined,
     selectedIndex: number,
     private readonly done: (action: SessionManagerAction) => void,
   ) {
+    super(tui, theme, keybindings);
     this.state = new SessionManagerState(selectedIndex);
     this.state.clamp(sessions.length);
-  }
-
-  private refresh(): void {
-    this.cachedWidth = undefined;
-    this.cachedLines = undefined;
-    this.tui.requestRender();
   }
 
   private clearTransientState(): void {
@@ -110,15 +109,21 @@ class SessionManagerDialog implements Component {
   }
 
   handleInput(data: string): void {
-    if (matchesKey(data, Key.escape)) {
+    if (this.matchesBinding(data, "tui.select.cancel")) {
       this.clearTransientState();
       this.done({ kind: "close" });
       return;
     }
 
-    if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
+    if (
+      this.matchesBinding(data, "tui.select.up") ||
+      this.matchesBinding(data, "tui.select.down")
+    ) {
       this.clearTransientState();
-      this.state.move(matchesKey(data, Key.up) ? -1 : 1, this.sessions.length);
+      this.state.move(
+        this.matchesBinding(data, "tui.select.up") ? -1 : 1,
+        this.sessions.length,
+      );
       this.refresh();
       return;
     }
@@ -126,7 +131,7 @@ class SessionManagerDialog implements Component {
     const session = this.selected();
     if (!session) return;
 
-    if (matchesKey(data, Key.enter)) {
+    if (this.matchesBinding(data, "tui.select.confirm")) {
       this.clearTransientState();
       this.done({ kind: "resume", session, index: this.state.selectedIndex });
       return;
@@ -165,21 +170,9 @@ class SessionManagerDialog implements Component {
     }
   }
 
-  render(width: number): string[] {
-    if (this.cachedLines && this.cachedWidth === width) return this.cachedLines;
-
+  protected renderContent(width: number): string[] {
     const safeWidth = Math.max(1, width);
     const lines: string[] = [];
-    const border = this.theme.fg("accent", "─".repeat(safeWidth));
-    lines.push(border);
-    lines.push(
-      truncateToWidth(
-        ` ${this.theme.fg("accent", this.theme.bold("Session Manager"))}`,
-        safeWidth,
-        "",
-      ),
-    );
-    lines.push("");
 
     if (this.sessions.length === 0) {
       lines.push(
@@ -242,33 +235,29 @@ class SessionManagerDialog implements Component {
       }
     }
 
-    lines.push("");
-    if (this.status) {
-      lines.push(
-        truncateToWidth(
-          ` ${this.theme.fg(this.status.type, this.status.text)}`,
-          safeWidth,
-          "…",
+    return renderDialogFrame(this.theme, safeWidth, {
+      title: "Session Manager",
+      body: lines,
+      status: this.status,
+      hints: [
+        keybindingHint(this.keybindings, "tui.select.up", "previous", "↑"),
+        keybindingHint(this.keybindings, "tui.select.down", "next", "↓"),
+        keybindingHint(
+          this.keybindings,
+          "tui.select.confirm",
+          "resume",
+          "enter",
         ),
-      );
-    }
-    lines.push(
-      truncateToWidth(
-        ` ${this.theme.fg("dim", "↑↓ navigate · enter resume · d d delete · r rename · esc close")}`,
-        safeWidth,
-        "…",
-      ),
-    );
-    lines.push(border);
-
-    this.cachedWidth = width;
-    this.cachedLines = lines;
-    return lines;
-  }
-
-  invalidate(): void {
-    this.cachedWidth = undefined;
-    this.cachedLines = undefined;
+        "d d delete",
+        "r rename",
+        keybindingHint(
+          this.keybindings,
+          "tui.select.cancel",
+          "close",
+          "esc",
+        ),
+      ],
+    });
   }
 
   dispose(): void {
@@ -283,10 +272,11 @@ export function showSessionManager(
   selectedIndex: number,
 ): Promise<SessionManagerAction> {
   return ctx.ui.custom<SessionManagerAction>(
-    (tui, theme, _keybindings, done) =>
+    (tui, theme, keybindings, done) =>
       new SessionManagerDialog(
         tui,
         theme,
+        keybindings,
         sessions,
         currentSessionPath,
         selectedIndex,
@@ -294,13 +284,11 @@ export function showSessionManager(
       ),
     {
       overlay: true,
-      overlayOptions: {
+      overlayOptions: centeredDialogOverlay({
         width: OVERLAY_WIDTH,
         minWidth: 44,
         maxHeight: "85%",
-        anchor: "center",
-        margin: 1,
-      },
+      }),
     },
   );
 }

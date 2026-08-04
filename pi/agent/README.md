@@ -6,10 +6,15 @@ To install dependencies:
 bun install
 ```
 
-To run:
+To run checks and tests:
 
 ```bash
-bun run index.ts
+bun run check
+bun test
 ```
 
-This project was created using `bun init` in bun v1.3.13. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Shared UI
+
+Reusable extension UI belongs in `shared/ui/`. Keep presentation contracts such as dialog framing, overlay defaults, and common component lifecycle behavior there; keep extension-specific state and actions inside each extension directory.
+
+Custom dialogs should use the shared dialog frame and overlay helpers so popup backgrounds, borders, spacing, hints, and configurable navigation keys stay consistent.

@@ -1,9 +1,16 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type {
+  KeybindingsManager,
+  Theme,
+} from "@earendil-works/pi-coding-agent";
 import {
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
+import {
+  keybindingHint,
+  renderDialogFrame,
+} from "../../shared/ui/index.ts";
 import { ICONS } from "./icons.ts";
 import { answerStateToResult, NOT_ANSWERED_LABEL } from "./results.ts";
 import { CUSTOM_OPTION_LABEL } from "./schema.ts";
@@ -146,11 +153,10 @@ export function renderQuestionnaire(
   state: RenderState,
   theme: Theme,
   width: number,
+  keybindings?: KeybindingsManager,
 ) {
   const renderWidth = Math.max(1, width);
-  const lines: string[] = [theme.fg("accent", "─".repeat(renderWidth))];
-  lines.push(renderTabs(state, theme, renderWidth));
-  lines.push("");
+  const lines: string[] = [];
 
   if (state.screen === state.questions.length) {
     appendPrefixed(
@@ -196,23 +202,36 @@ export function renderQuestionnaire(
       }
     });
 
-    lines.push("");
-    appendPrefixed(
-      lines,
-      renderWidth,
-      " ",
-      theme.fg(
-        "dim",
-        `${ICONS.left} return to questions ${ICONS.separator} Enter submit ${ICONS.separator} Esc decline`,
-      ),
-    );
-    lines.push(theme.fg("accent", "─".repeat(renderWidth)));
-    return lines;
+    return renderDialogFrame(theme, renderWidth, {
+      header: [renderTabs(state, theme, renderWidth)],
+      body: lines,
+      hints: [
+        `${ICONS.left} return to questions`,
+        keybindingHint(
+          keybindings,
+          "tui.select.confirm",
+          "submit",
+          "enter",
+        ),
+        keybindingHint(
+          keybindings,
+          "tui.select.cancel",
+          "decline",
+          "esc",
+        ),
+      ],
+    });
   }
 
   const question = state.questions[state.screen];
   const answer = state.answers[state.screen];
-  if (!question || !answer) return lines;
+  if (!question || !answer) {
+    return renderDialogFrame(theme, renderWidth, {
+      header: [renderTabs(state, theme, renderWidth)],
+      body: lines,
+      hints: [],
+    });
+  }
 
   appendPrefixed(
     lines,
@@ -279,33 +298,63 @@ export function renderQuestionnaire(
     appendPrefixed(lines, renderWidth, " ", theme.fg("muted", "Your answer:"));
     for (const line of state.editor.render(Math.max(1, renderWidth - 2)))
       lines.push(` ${line}`);
-    lines.push("");
-    appendPrefixed(
-      lines,
-      renderWidth,
-      " ",
-      theme.fg(
-        "dim",
-        `Enter confirm ${ICONS.separator} Shift+Enter newline ${ICONS.separator} Esc return to options`,
-      ),
-    );
-  } else {
-    lines.push("");
-    const selectionHelp =
-      question.type === "single"
-        ? "Enter select and continue"
-        : `Space toggle ${ICONS.separator} Enter edit custom answer`;
-    appendPrefixed(
-      lines,
-      renderWidth,
-      " ",
-      theme.fg(
-        "dim",
-        `↑↓ navigate ${ICONS.separator} ${selectionHelp} ${ICONS.separator} ${ICONS.horizontal} tabs ${ICONS.separator} Esc decline`,
-      ),
-    );
   }
 
-  lines.push(theme.fg("accent", "─".repeat(renderWidth)));
-  return lines;
+  const hints =
+    state.editQuestionIndex !== undefined
+      ? [
+          keybindingHint(
+            keybindings,
+            "tui.input.submit",
+            "confirm",
+            "enter",
+          ),
+          keybindingHint(
+            keybindings,
+            "tui.input.newLine",
+            "newline",
+            "shift+enter",
+          ),
+          keybindingHint(
+            keybindings,
+            "tui.select.cancel",
+            "return to options",
+            "esc",
+          ),
+        ]
+      : [
+          keybindingHint(keybindings, "tui.select.up", "previous", "↑"),
+          keybindingHint(keybindings, "tui.select.down", "next", "↓"),
+          ...(question.type === "single"
+            ? [
+                keybindingHint(
+                  keybindings,
+                  "tui.select.confirm",
+                  "select and continue",
+                  "enter",
+                ),
+              ]
+            : [
+                "space toggle",
+                keybindingHint(
+                  keybindings,
+                  "tui.select.confirm",
+                  "edit custom answer",
+                  "enter",
+                ),
+              ]),
+          `${ICONS.horizontal} tabs`,
+          keybindingHint(
+            keybindings,
+            "tui.select.cancel",
+            "decline",
+            "esc",
+          ),
+        ];
+
+  return renderDialogFrame(theme, renderWidth, {
+    header: [renderTabs(state, theme, renderWidth)],
+    body: lines,
+    hints,
+  });
 }
