@@ -20,3 +20,6 @@
 
 [pull]
 	rebase = true
+
+[coderabbit]
+	machineId = cli/505aeff807f141d4954cc148665465e8
