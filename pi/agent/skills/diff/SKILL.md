@@ -12,8 +12,8 @@ Format Before/After comparisons as focused unified diff fences. Pi renders these
 ````markdown
 `optional/repository/path.ext`:
 
-- Optional concise description of the change.
-- Optional rationale or symbol context.
+- Concise description of the change.
+- Rationale or symbol context.
 
 ```diff:<optional-language>
  unchanged context
@@ -76,7 +76,6 @@ When present, leave one blank line between the path, bullet list, and fence.
 - Introduce a shared timeout constant.
 
 ```diff:typescript
-- (not present)
 +export const DEFAULT_TIMEOUT = 5_000;
 ```
 ````
@@ -88,7 +87,6 @@ When present, leave one blank line between the path, bullet list, and fence.
 
 ```diff:typescript
 -export const LEGACY_TIMEOUT = 1_000;
-+(removed)
 ```
 ````
 

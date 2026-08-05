@@ -212,6 +212,75 @@ describe("side-by-side diff code block", () => {
     expect(lines.every((line) => visibleWidth(line) <= 100)).toBe(true);
   });
 
+  test("wraps long replacement lines without truncating their suffixes", () => {
+    installDiffRenderer();
+    const before =
+      "const beforeValue = buildConfiguration(alpha, beta, gamma, delta, epsilon); // BEFORE_TAIL";
+    const after =
+      "const afterValue = buildConfiguration(alpha, beta, gamma, delta, epsilon, zeta); // AFTER_TAIL";
+    const lines = new Markdown(`\`\`\`diff\n-${before}\n+${after}\n\`\`\``, 1, 0, markdownTheme).render(
+      100,
+    );
+    const visibleLines = lines.map(stripAnsi);
+
+    expect(visibleLines.some((line) => line.includes("BEFORE_TAIL"))).toBe(true);
+    expect(visibleLines.some((line) => line.includes("AFTER_TAIL"))).toBe(true);
+    expect(visibleLines.filter((line) => line.includes("- const beforeValue"))).toHaveLength(1);
+    expect(visibleLines.filter((line) => line.includes("+ const afterValue"))).toHaveLength(1);
+    expect(lines.every((line) => visibleWidth(line) <= 100)).toBe(true);
+  });
+
+  test("preserves syntax and changed-byte backgrounds across wrapped lines", () => {
+    installDiffRenderer();
+    const exactHighlightTheme = {
+      ...markdownTheme,
+      highlightCode: (code: string) =>
+        code.split("\n").map((line) => `\x1b[35m${line}\x1b[0m`),
+    };
+    const before = `const value = "${"a".repeat(70)}old";`;
+    const after = `const value = "${"a".repeat(70)}new";`;
+    const lines = new Markdown(
+      `\`\`\`diff:typescript\n-${before}\n+${after}\n\`\`\``,
+      1,
+      0,
+      exactHighlightTheme,
+    ).render(100);
+    const beforeContinuation = lines.find((line) => stripAnsi(line).includes('old";'));
+    const afterContinuation = lines.find((line) => stripAnsi(line).includes('new";'));
+
+    expect(beforeContinuation).toBeDefined();
+    expect(afterContinuation).toBeDefined();
+    expect(beforeContinuation).toContain("\x1b[35m");
+    expect(afterContinuation).toContain("\x1b[35m");
+    expect(beforeContinuation).toContain("\x1b[48;2;53;28;36m");
+    expect(afterContinuation).toContain("\x1b[48;2;31;48;29m");
+    for (const background of ["\x1b[48;2;53;28;36m", "\x1b[48;2;31;48;29m"]) {
+      const backgroundLines = lines.filter((line) => line.includes(background));
+      expect(backgroundLines.length).toBeGreaterThan(0);
+      expect(
+        backgroundLines.every(
+          (line) => line.lastIndexOf(background) < line.lastIndexOf("\x1b[49m"),
+        ),
+      ).toBe(true);
+    }
+    expect(lines.every((line) => visibleWidth(line) <= 100)).toBe(true);
+  });
+
+  test("wraps long metadata lines without truncating them", () => {
+    installDiffRenderer();
+    const path = `${"nested/".repeat(16)}example.ts`;
+    const lines = new Markdown(
+      `\`\`\`diff\ndiff --git a/${path} b/${path}\n-old\n+new\n\`\`\``,
+      1,
+      0,
+      markdownTheme,
+    ).render(100);
+    const visibleLines = lines.map(stripAnsi);
+
+    expect(visibleLines.filter((line) => line.includes("example.ts")).length).toBeGreaterThan(1);
+    expect(lines.every((line) => visibleWidth(line) <= 100)).toBe(true);
+  });
+
   test("restores full-pane backgrounds for unpaired changes", () => {
     installDiffRenderer();
     const lines = new Markdown(
@@ -243,6 +312,23 @@ describe("side-by-side diff code block", () => {
 
     const addedCells = lines.filter((line) => line.includes(addedBackground));
     expect(addedCells).toHaveLength(2);
+  });
+
+  test("keeps full-pane backgrounds on wrapped unpaired changes", () => {
+    installDiffRenderer();
+    const addedBackground = "\x1b[48;2;31;48;29m";
+    const added =
+      "insert a deliberately long standalone line that wraps across several visual rows and keeps its full background through ADDED_TAIL";
+    const lines = new Markdown(`\`\`\`diff\n+${added}\n\`\`\``, 1, 0, markdownTheme).render(100);
+    const addedLines = lines.filter((line) => line.includes(addedBackground));
+
+    expect(addedLines.length).toBeGreaterThan(1);
+    expect(addedLines.some((line) => stripAnsi(line).includes("ADDED_TAIL"))).toBe(true);
+    for (const line of addedLines) {
+      const start = line.indexOf(addedBackground) + addedBackground.length;
+      const cell = line.slice(start, line.indexOf("\x1b[49m", start));
+      expect(visibleWidth(cell)).toBe(46);
+    }
   });
 
   test("backgrounds only changed bytes on aligned lines", () => {

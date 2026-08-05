@@ -1,5 +1,9 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import {
+  truncateToWidth,
+  visibleWidth,
+  wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 import { diffArrays } from "diff";
 import type { CodeBlockRenderContext } from "../types.ts";
 import { applyDiffBackground, getDiffBackgroundAnsi } from "./theme.ts";
@@ -22,6 +26,7 @@ const MAX_BYTE_DIFF_TIME_MS = 5;
 const GAP_SCORE = -0.55;
 const ANSI_SEQUENCE = /^\x1b\[[0-?]*[ -/]*[@-~]/;
 const ANSI_SEQUENCES = /\x1b\[[0-?]*[ -/]*[@-~]/g;
+const BACKGROUND_RESET = "\x1b[49m";
 const textEncoder = new TextEncoder();
 
 type ByteDiff = {
@@ -377,7 +382,7 @@ function applyByteRangeBackground(
     const range = ranges[rangeIndex];
     const changed = range !== undefined && range.start <= sourceByteOffset;
     if (changed !== backgroundActive) {
-      result += changed ? background : "\x1b[49m";
+      result += changed ? background : BACKGROUND_RESET;
       backgroundActive = changed;
     }
     result += character;
@@ -385,7 +390,7 @@ function applyByteRangeBackground(
     sourceByteOffset += byteLength(character);
   }
 
-  if (backgroundActive) result += "\x1b[49m";
+  if (backgroundActive) result += BACKGROUND_RESET;
   return result;
 }
 
@@ -394,7 +399,7 @@ function renderDiffCell(
   highlightedText: string | undefined,
   width: number,
   theme?: Theme,
-): string {
+): string[] {
   const color =
     cell.marker === "-"
       ? "toolDiffRemoved"
@@ -416,10 +421,19 @@ function renderDiffCell(
     );
   }
 
-  const value = padToWidth(`${marker} ${source}`, width);
-  return theme && backgroundKey && cell.changedBytes === undefined
-    ? applyDiffBackground(theme, backgroundKey, value)
-    : value;
+  return wrapTextWithAnsi(source, Math.max(1, width - 2)).map((line, index) => {
+    // wrapTextWithAnsi carries active backgrounds into continuation lines but
+    // intentionally leaves each visual line open. Close partial diff backgrounds
+    // before padding and borders so they cannot bleed outside the cell.
+    const stableLine =
+      theme && backgroundKey && cell.changedBytes !== undefined
+        ? `${line}${BACKGROUND_RESET}`
+        : line;
+    const value = padToWidth(`${index === 0 ? marker : " "} ${stableLine}`, width);
+    return theme && backgroundKey && cell.changedBytes === undefined
+      ? applyDiffBackground(theme, backgroundKey, value)
+      : value;
+  });
 }
 
 export function renderSideBySideDiff({
@@ -452,31 +466,42 @@ export function renderSideBySideDiff({
     const row = rows[rowIndex]!;
     if (row.type === "meta") {
       const metadata = theme?.fg("muted", row.text) ?? row.text;
-      lines.push(
-        margin + border("│ ") + padToWidth(metadata, contentWidth - 4) + border(" │") + margin,
-      );
+      for (const metadataLine of wrapTextWithAnsi(metadata, contentWidth - 4)) {
+        lines.push(
+          margin +
+            border("│ ") +
+            padToWidth(metadataLine, contentWidth - 4) +
+            border(" │") +
+            margin,
+        );
+      }
       continue;
     }
 
-    lines.push(
-      margin +
-        border("│ ") +
-        renderDiffCell(
-          row.before,
-          highlightedRows.get(rowIndex)?.before,
-          beforeWidth,
-          theme,
-        ) +
-        border(" │ ") +
-        renderDiffCell(
-          row.after,
-          highlightedRows.get(rowIndex)?.after,
-          afterWidth,
-          theme,
-        ) +
-        border(" │") +
-        margin,
+    const beforeLines = renderDiffCell(
+      row.before,
+      highlightedRows.get(rowIndex)?.before,
+      beforeWidth,
+      theme,
     );
+    const afterLines = renderDiffCell(
+      row.after,
+      highlightedRows.get(rowIndex)?.after,
+      afterWidth,
+      theme,
+    );
+    const visualRowCount = Math.max(beforeLines.length, afterLines.length);
+    for (let visualIndex = 0; visualIndex < visualRowCount; visualIndex++) {
+      lines.push(
+        margin +
+          border("│ ") +
+          (beforeLines[visualIndex] ?? " ".repeat(beforeWidth)) +
+          border(" │ ") +
+          (afterLines[visualIndex] ?? " ".repeat(afterWidth)) +
+          border(" │") +
+          margin,
+      );
+    }
   }
 
   lines.push(
