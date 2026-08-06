@@ -1,5 +1,6 @@
 import type { Component, TUI } from "@earendil-works/pi-tui";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { DynamicWorkflowAgentTarget } from "../../lib/dynamic-workflow-events.ts";
 import { ChatScrollState } from "./scroll-state.ts";
 
 export const PI_083_ROOT_CHILD_COUNT = 9;
@@ -14,6 +15,8 @@ export interface Pi083Root {
 
 export interface SidebarRenderer {
   render(width: number, height: number): string[];
+  /** Zero-based row lookup retained from the latest sidebar render. */
+  hitTestAgent?(row: number): DynamicWorkflowAgentTarget | undefined;
 }
 
 export interface TuiWithMutableRender extends TUI {
@@ -70,6 +73,8 @@ function isComponent(value: unknown): value is Component {
 
 export class PatchedLayout {
   private lastSidebarVisible = false;
+  private lastWidth = 0;
+  private lastHeight = 0;
 
   constructor(
     private readonly tui: TUI,
@@ -81,6 +86,8 @@ export class PatchedLayout {
   render(width: number): string[] {
     const height = Math.max(1, this.tui.terminal.rows);
     const sidebarVisible = width >= SIDEBAR_MIN_TERMINAL_WIDTH;
+    this.lastWidth = width;
+    this.lastHeight = height;
     const leftWidth = sidebarVisible
       ? Math.max(1, width - SIDEBAR_WIDTH)
       : width;
@@ -122,6 +129,25 @@ export class PatchedLayout {
 
     const sidebarLines = this.sidebar.render(SIDEBAR_WIDTH, height);
     return composeColumns(leftLines, sidebarLines, leftWidth, SIDEBAR_WIDTH, height);
+  }
+
+  /** Hit-test one-based SGR terminal coordinates against the latest render. */
+  hitTestSidebar(
+    column: number,
+    row: number,
+  ): DynamicWorkflowAgentTarget | undefined {
+    if (
+      !this.lastSidebarVisible ||
+      !Number.isInteger(column) ||
+      !Number.isInteger(row) ||
+      row < 1 ||
+      row > this.lastHeight
+    ) {
+      return undefined;
+    }
+    const sidebarStart = this.lastWidth - SIDEBAR_WIDTH + 1;
+    if (column < sidebarStart || column > this.lastWidth) return undefined;
+    return this.sidebar.hitTestAgent?.(row - 1);
   }
 }
 

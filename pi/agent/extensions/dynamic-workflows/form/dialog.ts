@@ -17,6 +17,7 @@ import {
   validateWorkflowDraft,
 } from "./state.ts";
 import { serializeWorkflowDraft } from "./serialize.ts";
+import { MAX_CONTEXT_BYTES_PER_AGENT, MAX_CONTEXT_FILES_PER_AGENT } from "../workflow.ts";
 import type { RoleCatalog, WorkflowAgentDraft, WorkflowDraft } from "./types.ts";
 import {
   checkbox,
@@ -245,6 +246,19 @@ export class WorkflowDialogComponent extends DialogComponent<ResolvedWorkflow> {
       {
         label: "Prompt", value: compact(agent.prompt, "required"),
         activate: () => this.beginEdit(`Prompt for ${agent.id}`, agent.prompt, (value) => { agent.prompt = value; }),
+      },
+      {
+        label: "Context files",
+        value: agent.contextFiles?.length ? agent.contextFiles.join(", ") : "none",
+        activate: () => this.beginEdit(
+          `Context files for ${agent.id} (one worktree-relative path per line)`,
+          agent.contextFiles?.join("\n") ?? "",
+          (value) => {
+            const paths = value.split(/\r?\n/).map((path) => path.trim()).filter(Boolean);
+            if (paths.length) agent.contextFiles = paths;
+            else delete agent.contextFiles;
+          },
+        ),
       },
     ];
 
@@ -539,6 +553,8 @@ export class WorkflowDialogComponent extends DialogComponent<ResolvedWorkflow> {
           `depends: ${agent.dependsOn.join(", ") || "none"}`,
           `effective tools: ${agent.effectiveTools.join(", ") || "none"}`,
           `effective skills: ${agent.effectiveSkills.join(", ") || "none"}`,
+          `approved context: ${agent.contextFiles?.join(", ") || "none"}`,
+          `context bounds: ${MAX_CONTEXT_FILES_PER_AGENT} files / ${MAX_CONTEXT_BYTES_PER_AGENT} aggregate bytes per agent`,
           `role commands: ${JSON.stringify(agent.resolvedRole.permissions.commands)}`,
           `workflow commands: ${agent.permissions?.commands ? JSON.stringify(agent.permissions.commands) : "inherit"}`,
           "effective commands: stricter matching decision from role and workflow rules",

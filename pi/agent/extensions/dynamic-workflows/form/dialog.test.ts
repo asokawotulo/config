@@ -32,7 +32,7 @@ const source = `export const workflow = {
   name: "review me",
   description: "A safe workflow",
   agents: [
-    { id: "first", role: "reader", prompt: "Inspect", dependsOn: [] },
+    { id: "first", role: "reader", prompt: "Inspect", dependsOn: [], contextFiles: ["src/first.ts"] },
     { id: "second", role: "reader", prompt: "Use {{agents.first.output}}", dependsOn: ["first"], tools: ["read"], skills: [], permissions: { commands: { "*": "deny" } } }
   ]
 };`;
@@ -70,6 +70,15 @@ describe("workflow approval dialog", () => {
     }
   });
 
+  test("offers multiline approval editing for per-agent context paths", () => {
+    const state = dialog();
+    state.component.handleInput("\t");
+    for (let index = 0; index < 3; index++) state.component.handleInput("\u001b[B");
+    expect(state.component.render(120).join("\n")).toContain("Context files: src/first.ts");
+    state.component.handleInput("\r");
+    expect(state.component.render(120).join("\n")).toContain("one worktree-relative path per line");
+  });
+
   test("keeps large forms within the terminal viewport", () => {
     const manyAgents = `export const workflow = { name: "large", agents: [${Array.from(
       { length: 12 },
@@ -94,6 +103,8 @@ describe("workflow approval dialog", () => {
     state.component.handleInput("\t");
     const review = state.component.render(120).join("\n");
     expect(review).toContain("Waves: 1[first] → 2[second]");
+    expect(review).toContain("approved context: src/first.ts");
+    expect(review).toContain("16 files / 262144 aggregate bytes");
     expect(review).toContain("effective commands");
     state.component.handleInput("\r");
     expect(state.completed()).toBe(true);

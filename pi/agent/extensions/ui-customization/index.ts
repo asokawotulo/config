@@ -6,9 +6,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import {
+  DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT,
   DYNAMIC_WORKFLOW_RUN_EVENT,
   DYNAMIC_WORKFLOW_STATE_EVENT,
   DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
+  type DynamicWorkflowOpenAgentEvent,
   type DynamicWorkflowStateRequestEvent,
 } from "../../lib/dynamic-workflow-events.ts";
 import { PatchedLayout, resolvePi083Root } from "./layout.ts";
@@ -16,6 +18,7 @@ import {
   DISABLE_MOUSE_REPORTING,
   ENABLE_MOUSE_REPORTING,
   isMouseInput,
+  parseLeftClick,
   parseScrollInput,
 } from "./mouse.ts";
 import {
@@ -117,6 +120,7 @@ export default function uiCustomization(pi: ExtensionAPI) {
           currentContext,
           git,
           workflows.getVisibleRuns(),
+          workflows.getRuns(),
         );
       },
       () => ctx.ui.theme,
@@ -127,15 +131,28 @@ export default function uiCustomization(pi: ExtensionAPI) {
 
     const stopInput = ctx.ui.onTerminalInput((data) => {
       const input = parseScrollInput(data);
-      if (!input) return isMouseInput(data) ? { consume: true } : undefined;
+      if (input) {
+        if (input === "wheel-up") scroll.scrollBy(-WHEEL_SCROLL_LINES);
+        else if (input === "wheel-down") scroll.scrollBy(WHEEL_SCROLL_LINES);
+        else if (input === "page-up") scroll.scrollPage(-1);
+        else scroll.scrollPage(1);
 
-      if (input === "wheel-up") scroll.scrollBy(-WHEEL_SCROLL_LINES);
-      else if (input === "wheel-down") scroll.scrollBy(WHEEL_SCROLL_LINES);
-      else if (input === "page-up") scroll.scrollPage(-1);
-      else scroll.scrollPage(1);
+        nextTui.requestRender();
+        return { consume: true };
+      }
 
-      nextTui.requestRender();
-      return { consume: true };
+      const click = parseLeftClick(data);
+      if (click) {
+        const target = layout.hitTestSidebar(click.column, click.row);
+        if (target) {
+          const event: DynamicWorkflowOpenAgentEvent = target;
+          // Dynamic Workflows owns suspend/attach/detach. The sidebar only
+          // publishes the selected identity and never starts a process.
+          pi.events.emit(DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT, event);
+        }
+        return { consume: true };
+      }
+      return isMouseInput(data) ? { consume: true } : undefined;
     });
 
     nextTui.terminal.write(ENABLE_MOUSE_REPORTING);

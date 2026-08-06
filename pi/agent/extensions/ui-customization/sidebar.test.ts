@@ -14,6 +14,7 @@ import type {
 import {
   buildSidebarMetadata,
   calculateSessionCost,
+  calculateSessionCosts,
   DynamicWorkflowSidebarState,
   formatDirectory,
   formatTokenCount,
@@ -73,6 +74,8 @@ function sidebarMetadata(
     contextWindow: "272K",
     contextPercent: 0,
     cost: 1.2345,
+    mainCost: 1,
+    subagentCost: 0.2345,
     modelName: "gpt-5.6-sol",
     thinkingLevel: "medium",
   };
@@ -109,6 +112,55 @@ describe("sidebar metadata", () => {
     ];
 
     expect(calculateSessionCost(entries)).toBe(10);
+    expect(calculateSessionCosts(entries)).toEqual({ total: 10, main: 10, subagents: 0 });
+  });
+
+  test("partitions workflow cost and does not double-count persisted event usage", () => {
+    const settled = entry({
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolName: "dynamic_workflow",
+        usage: usage(5),
+        details: { runId: "settled", agents: [{ usage: usage(5) }] },
+      },
+    });
+    const runs = [
+      workflowRun("settled", "completed", 1, {
+        agents: [{ id: "done", role: "worker", status: "completed", cost: 5 }],
+      }),
+      workflowRun("active", "running", 2, {
+        agents: [{ id: "live", role: "worker", status: "running", cost: 2 }],
+      }),
+    ];
+    const assistant = entry({
+      type: "message",
+      message: { role: "assistant", usage: usage(1) },
+    });
+
+    expect(calculateSessionCosts([assistant, settled, settled], runs)).toEqual({
+      total: 8,
+      main: 1,
+      subagents: 7,
+    });
+  });
+
+  test("replaces active snapshot cost when its settled tool result persists", () => {
+    const run = workflowRun("transition", "running", 1, {
+      agents: [{ id: "agent", role: "worker", status: "running", cost: 3 }],
+    });
+    expect(calculateSessionCosts([], [run]).subagents).toBe(3);
+
+    const result = entry({
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolName: "dynamic_workflow",
+        usage: usage(3),
+        details: { runId: "transition", agents: [{ cost: 3 }] },
+      },
+    });
+    expect(calculateSessionCosts([result], [run]).subagents).toBe(3);
   });
 
   test("formats context tokens and home-relative directories", () => {
@@ -237,8 +289,10 @@ describe("SidebarComponent", () => {
     );
     const lines = sidebar.render(30, 20);
 
-    expect(lines.join("\n")).toContain("$1.234");
-    expect(lines.every((line) => visibleWidth(line) <= 30)).toBe(true);
+    expect(lines.join("\n")).toContain("Total $1.234");
+    expect(lines.join("\n")).toContain("Main $1.000");
+    expect(lines.join("\n")).toContain("Subagents $0.234");
+    expect(lines.every((line) => visibleWidth(line) === 30)).toBe(true);
   });
 
   test("renders workflow statuses and one bounded activity row before context and model", () => {
@@ -261,8 +315,10 @@ describe("SidebarComponent", () => {
     const lines = sidebar.render(30, 30);
     const text = lines.join("\n");
 
-    expect(text.indexOf("Workflow")).toBeLessThan(text.indexOf("Context"));
+    expect(text.indexOf("Directory")).toBeLessThan(text.indexOf("Session"));
+    expect(text.indexOf("Session")).toBeLessThan(text.indexOf("Context"));
     expect(text.indexOf("Context")).toBeLessThan(text.indexOf("Model"));
+    expect(text.indexOf("Model")).toBeLessThan(text.indexOf("Workflow"));
     expect(text).toContain("running research");
     expect(text).toContain("completed verify");
     expect(lines.filter((line) => line.includes("Indexing"))).toHaveLength(1);
@@ -279,10 +335,11 @@ describe("SidebarComponent", () => {
       ]),
       identityTheme,
     );
-    const text = sidebar.render(30, 20).join("\n");
+    const text = sidebar.render(30, 15).join("\n");
 
     expect(text).toContain("Context");
     expect(text).toContain("Model");
+    expect(text).toContain("running worker");
     expect(text).not.toContain("optional detail");
   });
 
@@ -302,12 +359,48 @@ describe("SidebarComponent", () => {
       ]),
       identityTheme,
     );
-    const lines = sidebar.render(30, 15);
+    const lines = sidebar.render(30, 20);
     const text = lines.join("\n");
 
     for (const agent of agents) expect(text).toContain(`running ${agent.id}`);
     expect(text).not.toContain("activity-");
-    expect(lines).toHaveLength(15);
+    expect(text).toContain("Context");
+    expect(text).toContain("Model");
+    expect(lines).toHaveLength(20);
     expect(lines.every((line) => visibleWidth(line) <= 30)).toBe(true);
+  });
+
+  test("shows per-agent costs only when spare height permits", () => {
+    const run = workflowRun("costs", "running", 1, {
+      agents: [{ id: "worker", role: "worker", status: "running", cost: 0.25 }],
+    });
+    const sidebar = new SidebarComponent(
+      () => sidebarMetadata([run]),
+      identityTheme,
+    );
+
+    expect(sidebar.render(30, 16).join("\n")).not.toContain("$0.250");
+    expect(sidebar.render(30, 30).join("\n")).toContain("$0.250");
+  });
+
+  test("retains exact hit targets only for visible agent status rows", () => {
+    const run = workflowRun("clickable", "running", 1, {
+      agents: [{ id: "worker", role: "reviewer", status: "running" }],
+    });
+    const sidebar = new SidebarComponent(
+      () => sidebarMetadata([run]),
+      identityTheme,
+    );
+    const lines = sidebar.render(30, 24);
+    const row = lines.findIndex((line) => line.includes("running worker"));
+
+    expect(sidebar.hitTestAgent(row)).toEqual({
+      sessionId: "session-a",
+      runId: "clickable",
+      agentId: "worker",
+    });
+    expect(sidebar.hitTestAgent(row - 1)).toBeUndefined();
+    sidebar.render(30, row);
+    expect(sidebar.hitTestAgent(row)).toBeUndefined();
   });
 });

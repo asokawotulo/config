@@ -26,8 +26,9 @@ Do not use a workflow for a small, localized task that the main agent can comple
    - global roles: `~/.pi/agent/roles/*.md`;
    - in this configuration repository: `pi/agent/roles/*.md`.
 3. Respect each role's fixed model, tools, skills, prompt, and command policy.
-4. Decide which tasks are independent and which require earlier outputs.
-5. Avoid parallel write-capable agents editing the same files. Prefer parallel read-only research followed by one implementation owner.
+4. Identify the smallest relevant file set before defining agents; avoid making every child rediscover the repository.
+5. Decide which tasks are independent and which require earlier outputs.
+6. Avoid parallel write-capable agents editing the same files. Prefer parallel read-only research followed by one implementation owner.
 
 The standard roles currently provided are:
 
@@ -49,8 +50,9 @@ export const workflow = {
     {
       id: "research",
       role: "researcher",
-      prompt: "Inspect the relevant code and return concrete paths and findings.",
+      prompt: "Inspect the supplied files first. Explore further only if they are insufficient, and return concise concrete findings.",
       dependsOn: [],
+      contextFiles: ["src/api.ts", "test/api.test.ts"],
       tools: ["read"],
       skills: []
     },
@@ -85,6 +87,7 @@ Every agent requires:
 
 Optional fields:
 
+- `contextFiles`: bounded worktree-relative files preloaded into the child context; identify these before launch and keep the set minimal;
 - `tools`: a subset of the role's tools;
 - `skills`: a subset of the role's skills;
 - `permissions.commands`: a complete command-rule map containing `"*"`; it can only make the role policy stricter.
@@ -111,6 +114,7 @@ Prefer least privilege:
 - implementation agents should own a disjoint set of files;
 - omit `bash` when it is unnecessary;
 - use `skills: []` when no skill is needed;
+- provide `contextFiles` and tell the agent to use them first, exploring only when they are insufficient;
 - workflow-level tools and skills cannot exceed the selected role.
 
 Bash commands are checked by both the workflow command policy and `cc-safety-net explain --json`. An `ask` decision or CC Safety Net block opens a serialized user prompt with **Allow once**, **Edit command**, and **Deny**. Never design a workflow that depends on the user approving a destructive command.

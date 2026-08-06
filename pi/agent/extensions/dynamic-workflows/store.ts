@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
   MAX_DYNAMIC_WORKFLOW_AGENTS,
+  MAX_DYNAMIC_WORKFLOW_COST,
   MAX_DYNAMIC_WORKFLOW_LABEL_LENGTH,
   MAX_DYNAMIC_WORKFLOW_RUNS,
   dynamicWorkflowDisplayText,
@@ -21,6 +22,20 @@ function runDir(runId: string) { return join(root(), runId); }
 function timestamp(value: unknown): number | undefined { return typeof value === "number" && Number.isFinite(value) ? value : undefined; }
 function agentStatus(value: unknown): DynamicWorkflowAgentStatus { return AGENT_STATUSES.has(value as DynamicWorkflowAgentStatus) ? value as DynamicWorkflowAgentStatus : "failed"; }
 function workflowStatus(value: unknown): DynamicWorkflowStatus { return WORKFLOW_STATUSES.has(value as DynamicWorkflowStatus) ? value as DynamicWorkflowStatus : "failed"; }
+function agentCost(value: WorkflowRun["agents"][number]["usage"]): number | undefined {
+  const cost = value?.cost;
+  const raw = typeof cost === "number" ? cost : cost?.total;
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) return undefined;
+  return Math.min(raw, MAX_DYNAMIC_WORKFLOW_COST);
+}
+
+function restoreLegacyAgentFields(run: WorkflowRun): WorkflowRun {
+  if (!Array.isArray(run.agents)) run.agents = [];
+  for (const agent of run.agents) {
+    if (typeof agent.finalSummary !== "string" && typeof agent.output === "string") agent.finalSummary = agent.output;
+  }
+  return run;
+}
 
 /** Project private run artifacts onto the bounded shape safe for shared UI events. */
 export function toRunSnapshot(run: WorkflowRun): DynamicWorkflowRunSnapshot {
@@ -29,6 +44,10 @@ export function toRunSnapshot(run: WorkflowRun): DynamicWorkflowRunSnapshot {
     const startedAt = timestamp(agent.startedAt);
     const finishedAt = timestamp(agent.finishedAt);
     const activity = dynamicWorkflowDisplayText(agent.sidebarActivity);
+    const cost = agentCost(agent.usage);
+    const zmxSessionId = agent.backend?.kind === "zmx"
+      ? dynamicWorkflowDisplayText(agent.backend.zmxSessionId, MAX_DYNAMIC_WORKFLOW_LABEL_LENGTH)
+      : "";
     return {
       id: dynamicWorkflowDisplayText(agent.id, MAX_DYNAMIC_WORKFLOW_LABEL_LENGTH),
       role: dynamicWorkflowDisplayText(agent.role, MAX_DYNAMIC_WORKFLOW_LABEL_LENGTH),
@@ -36,6 +55,8 @@ export function toRunSnapshot(run: WorkflowRun): DynamicWorkflowRunSnapshot {
       ...(startedAt === undefined ? {} : { startedAt }),
       ...(finishedAt === undefined ? {} : { finishedAt }),
       ...(activity ? { activity } : {}),
+      ...(cost === undefined ? {} : { cost }),
+      ...(zmxSessionId ? { zmxSessionId } : {}),
     };
   });
   const finishedAt = timestamp(run.finishedAt);
@@ -73,7 +94,9 @@ export function loadRuns(sessionId?: string): WorkflowRun[] {
   for (const entry of readdirSync(root(), { withFileTypes: true })) {
     if (!entry.isDirectory() || !entry.name.startsWith("wf_")) continue;
     try {
-      const run = JSON.parse(readFileSync(join(root(), entry.name, "run.json"), "utf8")) as WorkflowRun;
+      const run = restoreLegacyAgentFields(
+        JSON.parse(readFileSync(join(root(), entry.name, "run.json"), "utf8")) as WorkflowRun,
+      );
       if (sessionId && run.sessionId !== sessionId) continue;
       if (run.status === "running") run.status = "interrupted";
       runs.push(run);
@@ -92,7 +115,8 @@ export function formatRun(run: WorkflowRun): string {
   ].filter(Boolean);
   for (const agent of run.agents) {
     lines.push(`- ${agent.id} [${agent.role}] ${agent.status}${agent.activity ? ` — ${agent.activity}` : ""}`);
-    if (agent.output) lines.push(`  Result: ${agent.output}`);
+    const summary = agent.finalSummary ?? agent.output;
+    if (summary) lines.push(`  Result: ${summary}`);
     if (agent.error) lines.push(`  Error: ${agent.error}`);
   }
   if (run.permissionDecisions.length) {

@@ -1,6 +1,9 @@
+import { isAbsolute } from "node:path";
 import type { PermissionAction, WorkflowAgentDefinition, WorkflowDefinition } from "../types.ts";
 import {
   AGENT_ID_PATTERN,
+  MAX_CONTEXT_FILE_PATH_BYTES,
+  MAX_CONTEXT_FILES_PER_AGENT,
   agentOutputReferences,
   invalidAgentOutputPlaceholder,
   parseWorkflow,
@@ -23,6 +26,7 @@ function cloneAgent(agent: WorkflowAgentDefinition): WorkflowAgentDraft {
     role: agent.role,
     prompt: agent.prompt,
     dependsOn: [...agent.dependsOn],
+    ...(agent.contextFiles === undefined ? {} : { contextFiles: [...agent.contextFiles] }),
     ...(agent.tools === undefined ? {} : { tools: [...agent.tools] }),
     ...(agent.skills === undefined ? {} : { skills: [...agent.skills] }),
     ...(agent.permissions === undefined ? {} : {
@@ -79,6 +83,7 @@ export function addAgent(
     role: agent.role ?? "",
     prompt: agent.prompt ?? "",
     dependsOn: agent.dependsOn ?? [],
+    ...(agent.contextFiles === undefined ? {} : { contextFiles: agent.contextFiles }),
     ...(agent.tools === undefined ? {} : { tools: agent.tools }),
     ...(agent.skills === undefined ? {} : { skills: agent.skills }),
     ...(agent.permissions === undefined ? {} : { permissions: agent.permissions }),
@@ -197,6 +202,22 @@ export function validateWorkflowDraft(draft: WorkflowDraft, roles: RoleCatalog):
       for (const dependency of agent.dependsOn) {
         if (dependency === agent.id) issue(issues, `${base}.dependsOn`, "An agent cannot depend on itself");
         else if (!byId.has(dependency)) issue(issues, `${base}.dependsOn`, `Unknown agent ${dependency}`);
+      }
+    }
+    if (agent.contextFiles !== undefined) {
+      validateStringList(agent.contextFiles, `${base}.contextFiles`, issues);
+      if (agent.contextFiles.length > MAX_CONTEXT_FILES_PER_AGENT) {
+        issue(issues, `${base}.contextFiles`, `Cannot contain more than ${MAX_CONTEXT_FILES_PER_AGENT} paths`);
+      }
+      for (const path of agent.contextFiles) {
+        if (typeof path !== "string") continue;
+        if (Buffer.byteLength(path, "utf8") > MAX_CONTEXT_FILE_PATH_BYTES) {
+          issue(issues, `${base}.contextFiles`, `Path exceeds ${MAX_CONTEXT_FILE_PATH_BYTES} bytes`);
+        }
+        if (isAbsolute(path) || /^[A-Za-z]:[\\/]/.test(path) || /^\\\\/.test(path) || path.split(/[\\/]+/).includes("..")) {
+          issue(issues, `${base}.contextFiles`, `Path must stay inside the workflow worktree: ${path}`);
+        }
+        if (/[\u0000-\u001f\u007f]/.test(path)) issue(issues, `${base}.contextFiles`, "Paths cannot contain control characters");
       }
     }
     if (agent.tools !== undefined) validateStringList(agent.tools, `${base}.tools`, issues, role?.tools);

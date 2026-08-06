@@ -7,6 +7,7 @@ function canonicalAgent(agent: WorkflowAgentDefinition): WorkflowAgentDefinition
     role: agent.role,
     prompt: agent.prompt,
     dependsOn: [...agent.dependsOn],
+    ...(agent.contextFiles === undefined ? {} : { contextFiles: [...agent.contextFiles] }),
     ...(agent.tools === undefined ? {} : { tools: [...agent.tools] }),
     ...(agent.skills === undefined ? {} : { skills: [...agent.skills] }),
     ...(agent.permissions === undefined ? {} : {

@@ -33,6 +33,11 @@ function makeLayout(rows: number) {
     render(width: number, height: number) {
       return Array.from({ length: height }, () => "#".repeat(width));
     },
+    hitTestAgent(row: number) {
+      return row === 2
+        ? { sessionId: "session", runId: "run", agentId: "agent" }
+        : undefined;
+    },
   };
   return {
     history,
@@ -74,5 +79,27 @@ describe("PatchedLayout", () => {
 
     expect(lines.at(-1)).toContain("footer");
     expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+    expect(layout.hitTestSidebar(width, 3)).toBeUndefined();
+  });
+
+  test("hit-tests only the latest visible sidebar bounds after resize", () => {
+    const { layout } = makeLayout(8);
+    layout.render(100);
+
+    expect(layout.hitTestSidebar(70, 3)).toBeUndefined();
+    expect(layout.hitTestSidebar(71, 3)).toEqual({
+      sessionId: "session",
+      runId: "run",
+      agentId: "agent",
+    });
+    expect(layout.hitTestSidebar(71, 2)).toBeUndefined();
+
+    layout.render(120);
+    expect(layout.hitTestSidebar(71, 3)).toBeUndefined();
+    expect(layout.hitTestSidebar(91, 3)).toEqual({
+      sessionId: "session",
+      runId: "run",
+      agentId: "agent",
+    });
   });
 });

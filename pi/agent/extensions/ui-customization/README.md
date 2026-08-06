@@ -6,7 +6,7 @@ This extension monkey-patches Pi's interactive TUI to provide:
 
 - a scrollable chat viewport;
 - an editor that stays visible while older chat is displayed; and
-- a responsive right sidebar with directory, Git worktree, session, Dynamic Workflow subagent status, context, cost, model, and thinking information.
+- a responsive 30-column right sidebar ordered as Directory, Session, Context, Model, then Workflow.
 
 ## Why it is version-specific
 
@@ -39,11 +39,15 @@ The sidebar appears at 100 terminal columns and wider. On narrower terminals it 
 
 ## Dynamic workflows
 
-The sidebar hydrates from the shared Dynamic Workflow event contract at session start and updates as runs progress. It shows every active workflow in the current session; when none are active, it keeps only the newest settled workflow visible. Each subagent has a status row, and running activity may use one additional truncated row when the terminal height allows it. Workflow rows are budgeted ahead of the lower-priority Context and Model sections, and all sidebar output remains within the 30-column sidebar.
+The sidebar hydrates from the shared Dynamic Workflow event contract at session start and updates as runs progress. It shows every active workflow in the current session; when none are active, it keeps only the newest settled workflow visible. Each subagent has a status row; bounded activity and per-agent cost rows appear only when terminal height remains after the Context, Model, and workflow status rows are budgeted. All sidebar output remains within 30 columns.
 
-## Context warnings
+Clicking a visible agent status row emits the shared `dynamic-workflows:open-agent` event for that exact session, run, and agent. The Dynamic Workflows extension owns suspending Pi, attaching to the zmx session, and resuming after detach. This UI extension never spawns an attach process. Clicks outside the visible sidebar (including all clicks in narrow mode) cannot emit an open-agent event; wheel and page scrolling continue to control chat history.
+
+## Context and cost
 
 The context used/window and percentage rows are muted at 50% or below (and when usage is unknown), accented above 50% through 80%, and shown as errors above 80%. In the active theme, accent is orange and error is red.
+
+Context cost is partitioned into Total, Main, and Subagents. Settled `dynamic_workflow` tool-result usage is the persisted subagent source of truth. Live event costs are included only until the matching result is persisted, so the active-to-settled transition does not double-count. Visible agents may also show their individual cost when height permits.
 
 ## Recovery
 

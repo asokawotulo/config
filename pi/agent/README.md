@@ -21,4 +21,4 @@ Custom dialogs should use the shared dialog frame and overlay helpers so popup b
 
 ## Dynamic workflows
 
-`extensions/dynamic-workflows/` provides editable, role-based Pi subagent DAGs with parallel execution, command approval through `cc-safety-net explain --json`, and live inspection via `/workflows`. Role definitions live in `roles/*.md`; see the extension README for the workflow and permission schemas.
+`extensions/dynamic-workflows/` provides editable, role-based Pi subagent DAGs with parallel execution, command approval through `cc-safety-net explain --json`, and live inspection via `/workflows`. It prefers persistent detached interactive Pi sessions under zmx (including Supacode's bundled zmx, without invoking the Supacode CLI) and falls back to embedded execution with a persistent transcript. Child transcripts stay in session artifacts; only bounded final summaries and aggregated nested usage return to the parent. Role definitions live in `roles/*.md`; see the extension README for workflow, context, permission, backend, and artifact contracts.

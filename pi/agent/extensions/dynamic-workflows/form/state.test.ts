@@ -18,7 +18,7 @@ const role: RoleDefinition = {
 const definition: WorkflowDefinition = {
   name: "draft",
   agents: [
-    { id: "source", role: "reader", prompt: "Inspect", dependsOn: [] },
+    { id: "source", role: "reader", prompt: "Inspect", dependsOn: [], contextFiles: ["src/source.ts"] },
     { id: "consumer", role: "reader", prompt: "Use {{agents.source.output}} twice: {{agents.source.output}}", dependsOn: ["source"] },
   ],
 };
@@ -34,6 +34,9 @@ describe("workflow form draft state", () => {
     expect(draft.agents[0]?.dependsOn).toEqual([]);
     expect(definition.name).toBe("draft");
     expect(definition.agents).toHaveLength(2);
+    expect(definition.agents[0]?.contextFiles).toEqual(["src/source.ts"]);
+    draft.agents[1]!.contextFiles = ["new.ts"];
+    expect(definition.agents[1]?.contextFiles).toBeUndefined();
   });
 
   test("renames ids, dependencies, and every output placeholder atomically", () => {
@@ -62,6 +65,7 @@ describe("workflow form draft state", () => {
     invalid.agents[1]!.tools = ["write"];
     invalid.agents[0]!.permissions = { commands: { nope: "allow" } };
     invalid.agents[1]!.prompt = "Use {{agents.missing.output}}";
+    invalid.agents[1]!.contextFiles = ["../outside.ts", "same.ts", "same.ts"];
     const result = validateWorkflowDraft(invalid, roles);
     expect(result.valid).toBe(false);
     expect(result.issues.map((item) => item.message).join("\n")).toContain("Unknown role");
@@ -69,5 +73,7 @@ describe("workflow form draft state", () => {
     expect(result.issues.map((item) => item.message).join("\n")).toContain("not allowed by the role");
     expect(result.issues.map((item) => item.message).join("\n")).toContain("must define a \"*\" rule");
     expect(result.issues.map((item) => item.message).join("\n")).toContain("unknown agent missing");
+    expect(result.issues.map((item) => item.message).join("\n")).toContain("workflow worktree");
+    expect(result.issues.map((item) => item.message).join("\n")).toContain("duplicate value same.ts");
   });
 });

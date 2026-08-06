@@ -2,16 +2,21 @@ export const DYNAMIC_WORKFLOW_EVENTS = {
   run: "dynamic-workflows:run",
   stateRequest: "dynamic-workflows:state-request",
   state: "dynamic-workflows:state",
+  openAgent: "dynamic-workflows:open-agent",
+  targetedControl: "dynamic-workflows:targeted-control",
 } as const;
 
 export const DYNAMIC_WORKFLOW_RUN_EVENT = DYNAMIC_WORKFLOW_EVENTS.run;
 export const DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT = DYNAMIC_WORKFLOW_EVENTS.stateRequest;
 export const DYNAMIC_WORKFLOW_STATE_EVENT = DYNAMIC_WORKFLOW_EVENTS.state;
+export const DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT = DYNAMIC_WORKFLOW_EVENTS.openAgent;
+export const DYNAMIC_WORKFLOW_TARGETED_CONTROL_EVENT = DYNAMIC_WORKFLOW_EVENTS.targetedControl;
 
 export const MAX_DYNAMIC_WORKFLOW_RUNS = 25;
 export const MAX_DYNAMIC_WORKFLOW_AGENTS = 32;
 export const MAX_DYNAMIC_WORKFLOW_LABEL_LENGTH = 120;
 export const MAX_DYNAMIC_WORKFLOW_DETAIL_LENGTH = 240;
+export const MAX_DYNAMIC_WORKFLOW_COST = 1_000_000;
 
 export type DynamicWorkflowAgentStatus = "queued" | "running" | "completed" | "failed" | "skipped" | "cancelled";
 export type DynamicWorkflowStatus = "running" | "completed" | "failed" | "cancelled" | "interrupted";
@@ -25,6 +30,10 @@ export interface DynamicWorkflowAgentSnapshot {
   finishedAt?: number;
   /** Coarse operational label only; never tool arguments or model text. */
   activity?: string;
+  /** Sanitized, finite USD total only; no token/request details. */
+  cost?: number;
+  /** Bounded opaque identity used only to open/control a zmx-backed session. */
+  zmxSessionId?: string;
 }
 
 /** A deliberately small, display-only projection of a workflow run. */
@@ -52,6 +61,23 @@ export interface DynamicWorkflowStateRequestEvent {
 export interface DynamicWorkflowStateEvent {
   sessionId: string;
   runs: DynamicWorkflowRunSnapshot[];
+}
+
+export interface DynamicWorkflowAgentTarget {
+  /** Parent Pi session owning the workflow. */
+  sessionId: string;
+  runId: string;
+  agentId: string;
+}
+
+/** Sidebar/UI request to open the persistent agent identified by the target snapshot. */
+export interface DynamicWorkflowOpenAgentEvent extends DynamicWorkflowAgentTarget {}
+
+export type DynamicWorkflowTargetedControlAction = "interrupt" | "terminate";
+
+/** Payload-free targeted control: prompts, tool arguments, and commands never cross this channel. */
+export interface DynamicWorkflowTargetedControlEvent extends DynamicWorkflowAgentTarget {
+  action: DynamicWorkflowTargetedControlAction;
 }
 
 /** Remove terminal control sequences and keep event strings single-line and bounded. */

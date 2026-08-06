@@ -6,18 +6,24 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { centeredDialogOverlay } from "../../shared/ui/index.ts";
 import {
+  DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT,
   DYNAMIC_WORKFLOW_RUN_EVENT,
   DYNAMIC_WORKFLOW_STATE_EVENT,
   DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
+  DYNAMIC_WORKFLOW_TARGETED_CONTROL_EVENT,
+  type DynamicWorkflowOpenAgentEvent,
   type DynamicWorkflowRunEvent,
   type DynamicWorkflowRunPhase,
   type DynamicWorkflowStateEvent,
   type DynamicWorkflowStateRequestEvent,
+  type DynamicWorkflowTargetedControlEvent,
 } from "../../lib/dynamic-workflow-events.ts";
 import { WorkflowDialogComponent } from "./form/dialog.ts";
 import { PermissionApprovalQueue } from "./permissions.ts";
 import { loadRoles } from "./roles.ts";
-import { runAgent } from "./runner.ts";
+import { aggregateAgentUsage, controlRunningAgent, runAgent } from "./runner.ts";
+import { childArtifactPaths, truncateUtf8, workflowArtifactDirectory, writeChildControl } from "./protocol.ts";
+import { attachZmxSession, killZmxSession, resolveZmxExecutable } from "./zmx.ts";
 import { formatRun, loadRuns, saveRun, toRunSnapshot, toRunSnapshots } from "./store.ts";
 import type { AgentRunRecord, ResolvedWorkflow, WorkflowRun } from "./types.ts";
 import { expandAgentOutputs, resolveWorkflow } from "./workflow.ts";
@@ -48,7 +54,7 @@ async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): 
       source,
       roles,
       resolveSource: (canonicalSource) => {
-        const plan = resolveWorkflow(canonicalSource, roles);
+        const plan = resolveWorkflow(canonicalSource, roles, ctx.cwd);
         validateResources(plan, pi, ctx);
         return plan;
       },
@@ -65,21 +71,52 @@ async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): 
   );
 }
 
-async function mapLimit<T>(items: T[], limit: number, operation: (item: T) => Promise<void>) {
+async function mapLimit<T>(
+  items: T[],
+  limit: number,
+  operation: (item: T) => Promise<void>,
+  signal?: AbortSignal,
+) {
   let index = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (index < items.length) {
+    while (!signal?.aborted && index < items.length) {
       const item = items[index++];
+      if (signal?.aborted) return;
       if (item !== undefined) await operation(item);
     }
   });
   await Promise.all(workers);
 }
 
+function parentResultText(run: WorkflowRun): string {
+  const lines: string[] = [];
+  for (const agent of run.agents) {
+    const summary = agent.finalSummary ?? agent.output;
+    const body = summary || (agent.error ? `Error: ${agent.error}` : "No final summary was produced.");
+    lines.push(`## ${agent.id} [${agent.status}]\n\n${body}`);
+  }
+  return truncateUtf8(lines.join("\n\n"), 50 * 1024);
+}
+
+function parentResultDetails(run: WorkflowRun) {
+  return {
+    runId: run.runId,
+    status: run.status,
+    artifact: join(workflowArtifactDirectory(run.runId), "run.json"),
+    agents: run.agents.map((agent) => ({
+      id: agent.id,
+      status: agent.status,
+      ...(agent.session?.sessionFile ? { artifact: agent.session.sessionFile }
+        : agent.backend?.kind === "zmx" ? { artifact: childArtifactPaths(run.runId, agent.id).directory } : {}),
+    })),
+  };
+}
+
 export default function dynamicWorkflows(pi: ExtensionAPI) {
   const active = new Map<string, { run: WorkflowRun; abort: AbortController }>();
   let currentSessionId: string | undefined;
   let lastUi: ExtensionContext["ui"] | undefined;
+  let attachingAgent = false;
 
   const updateStatus = () => {
     if (!lastUi) return;
@@ -107,6 +144,63 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
   pi.events.on(DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT, (data) => {
     const request = data as Partial<DynamicWorkflowStateRequestEvent> | undefined;
     if (typeof request?.sessionId === "string") publishState(request.sessionId);
+  });
+  pi.events.on(DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT, (data) => {
+    const request = data as Partial<DynamicWorkflowOpenAgentEvent> | undefined;
+    if (
+      typeof request?.sessionId !== "string" || request.sessionId !== currentSessionId ||
+      typeof request.runId !== "string" || typeof request.agentId !== "string"
+    ) return;
+    const run = active.get(request.runId)?.run
+      ?? loadRuns(request.sessionId).find((candidate) => candidate.runId === request.runId);
+    const agent = run?.agents.find((record) => record.id === request.agentId);
+    const sessionName = agent?.backend?.kind === "zmx" ? agent.backend.zmxSessionId : undefined;
+    const zmxPath = resolveZmxExecutable();
+    const ui = lastUi;
+    if (!sessionName || !zmxPath || !ui) {
+      ui?.notify("This workflow agent has no attachable zmx session", "warning");
+      return;
+    }
+    if (attachingAgent) {
+      ui.notify("Another workflow agent is already open", "warning");
+      return;
+    }
+    attachingAgent = true;
+    void ui.custom<void>((tui, _theme, _keybindings, done) => {
+      void attachZmxSession(tui, zmxPath, sessionName)
+        .catch((error) => ui.notify(`Unable to attach workflow agent: ${error instanceof Error ? error.message : String(error)}`, "error"))
+        .finally(() => {
+          attachingAgent = false;
+          done(undefined);
+        });
+      return { render: () => [], invalidate: () => {} };
+    });
+  });
+  pi.events.on(DYNAMIC_WORKFLOW_TARGETED_CONTROL_EVENT, (data) => {
+    const request = data as Partial<DynamicWorkflowTargetedControlEvent> | undefined;
+    if (
+      typeof request?.sessionId !== "string" || request.sessionId !== currentSessionId ||
+      typeof request.runId !== "string" || typeof request.agentId !== "string" ||
+      (request.action !== "interrupt" && request.action !== "terminate")
+    ) return;
+    const run = active.get(request.runId)?.run
+      ?? loadRuns(request.sessionId).find((candidate) => candidate.runId === request.runId);
+    if (!run || run.sessionId !== request.sessionId) return;
+    const agent = run.agents.find((record) => record.id === request.agentId);
+    if (!agent) return;
+    const controlled = agent.status === "running" && controlRunningAgent(request.runId, request.agentId, request.action);
+    if (controlled && request.action === "interrupt") return;
+    if (agent.backend?.kind !== "zmx") return;
+    if (request.action === "interrupt") {
+      writeChildControl(childArtifactPaths(request.runId, request.agentId), "interrupt");
+      return;
+    }
+    const zmxPath = resolveZmxExecutable();
+    const zmxSessionId = agent.backend.zmxSessionId;
+    if (!zmxPath || !zmxSessionId) return;
+    void killZmxSession(zmxPath, zmxSessionId).catch((error) => {
+      lastUi?.notify(`Unable to terminate workflow agent: ${error instanceof Error ? error.message : String(error)}`, "error");
+    });
   });
 
   pi.on("session_start", (_event, ctx) => {
@@ -142,8 +236,31 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
       if (!choice) return;
       const selected = runs[labels.indexOf(choice)];
       if (!selected) return;
-      if (ctx.mode === "tui") await ctx.ui.editor("Workflow details (read-only; edits are ignored)", formatRun(selected));
-      else ctx.ui.notify(formatRun(selected), "info");
+      const agentLabels = selected.agents.map((agent) => `${agent.status}  ${agent.id}  [${agent.role}]`);
+      const agentChoice = await ctx.ui.select("Workflow agents", [...agentLabels, "View workflow details"]);
+      if (!agentChoice) return;
+      if (agentChoice === "View workflow details") {
+        if (ctx.mode === "tui") await ctx.ui.editor("Workflow details (read-only; edits are ignored)", formatRun(selected));
+        else ctx.ui.notify(formatRun(selected), "info");
+        return;
+      }
+      const agent = selected.agents[agentLabels.indexOf(agentChoice)];
+      if (!agent) return;
+      const actions = [
+        ...(agent.backend?.kind === "zmx" ? ["Open agent"] : []),
+        ...(agent.status === "running" ? ["Interrupt agent"] : []),
+        ...(agent.backend?.kind === "zmx" ? ["Terminate session"] : []),
+        "View workflow details",
+      ];
+      const action = await ctx.ui.select(`Agent ${agent.id}`, actions);
+      const target = { sessionId: selected.sessionId, runId: selected.runId, agentId: agent.id };
+      if (action === "Open agent") pi.events.emit(DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT, target);
+      else if (action === "Interrupt agent") pi.events.emit(DYNAMIC_WORKFLOW_TARGETED_CONTROL_EVENT, { ...target, action: "interrupt" });
+      else if (action === "Terminate session") pi.events.emit(DYNAMIC_WORKFLOW_TARGETED_CONTROL_EVENT, { ...target, action: "terminate" });
+      else if (action === "View workflow details") {
+        if (ctx.mode === "tui") await ctx.ui.editor("Workflow details (read-only; edits are ignored)", formatRun(selected));
+        else ctx.ui.notify(formatRun(selected), "info");
+      }
     },
   });
 
@@ -153,7 +270,7 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
     description: [
       "Propose a complete static subagent DAG and run it only after editable user approval.",
       "The script must be exactly `export const workflow = { name, description?, agents }` using static literals.",
-      "Each agent requires id, role, prompt, and dependsOn. Optional tools, skills, and permissions.commands may only narrow its role.",
+      "Each agent requires id, role, prompt, and dependsOn. Optional contextFiles preload approved worktree files; tools, skills, and permissions.commands may only narrow its role.",
       "Declare every agent up front. Agents in the same dependency wave run in parallel. Use {{agents.ID.output}} in dependent prompts.",
     ].join(" "),
     promptSnippet: "Propose an editable, statically declared DAG of isolated Pi subagents",
@@ -196,7 +313,7 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
         publishRun(run, "progress");
         onUpdate?.({
           content: [{ type: "text", text: `${run.name}: ${run.agents.filter((agent) => agent.status === "completed").length}/${run.agents.length} agents completed` }],
-          details: { runId, status: run.status, agents: run.agents.map(({ id, role, status, activity, error }) => ({ id, role, status, activity, error })) },
+          details: parentResultDetails(run),
         });
       };
 
@@ -214,14 +331,25 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
               emit();
               return;
             }
+            let expandedPrompt: string;
+            try {
+              expandedPrompt = expandAgentOutputs(agent.prompt, outputs);
+            } catch (error) {
+              record.status = "failed";
+              record.error = error instanceof Error ? error.message : String(error);
+              record.finishedAt = Date.now();
+              emit();
+              return;
+            }
             record.status = "running";
             record.startedAt = Date.now();
             record.activity = "Starting Pi session";
             record.sidebarActivity = "Starting Pi session";
             emit();
             const result = await runAgent({
+              runId,
               agent,
-              prompt: expandAgentOutputs(agent.prompt, outputs),
+              prompt: expandedPrompt,
               cwd: ctx.cwd,
               projectTrusted: ctx.isProjectTrusted(),
               parentContext: ctx,
@@ -232,16 +360,16 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
               onProgress: emit,
             });
             record.finishedAt = Date.now();
-            record.output = result.output;
+            record.finalSummary = result.finalSummary;
             if (result.ok) {
               record.status = "completed";
-              outputs.set(agent.id, result.output);
+              outputs.set(agent.id, result.finalSummary);
             } else {
-              record.status = abort.signal.aborted ? "cancelled" : "failed";
+              record.status = abort.signal.aborted || result.cancelled ? "cancelled" : "failed";
               record.error = result.error ?? "Agent failed";
             }
             emit();
-          });
+          }, abort.signal);
         }
         run.status = abort.signal.aborted ? "cancelled" : run.agents.some((agent) => agent.status === "failed" || agent.status === "skipped") ? "failed" : "completed";
       } catch (error) {
@@ -249,13 +377,25 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
         run.error = error instanceof Error ? error.message : String(error);
       } finally {
         signal?.removeEventListener("abort", onAbort);
+        if (abort.signal.aborted) {
+          for (const agent of run.agents) {
+            if (agent.status !== "queued") continue;
+            agent.status = "cancelled";
+            agent.error = "Workflow cancelled before agent launch";
+            agent.finishedAt = Date.now();
+          }
+        }
         run.finishedAt = Date.now();
         saveRun(run);
         publishRun(run, "settled");
         active.delete(runId);
         updateStatus();
       }
-      return { content: [{ type: "text", text: formatRun(run) }], details: { runId, status: run.status, agents: run.agents } };
+      return {
+        content: [{ type: "text", text: parentResultText(run) }],
+        details: parentResultDetails(run),
+        usage: aggregateAgentUsage(run.agents),
+      };
     },
 
     renderCall(args, theme) {

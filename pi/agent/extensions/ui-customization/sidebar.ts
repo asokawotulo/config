@@ -3,6 +3,7 @@ import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
   dynamicWorkflowDisplayText,
   type DynamicWorkflowAgentStatus,
+  type DynamicWorkflowAgentTarget,
   type DynamicWorkflowRunSnapshot,
   type DynamicWorkflowStatus,
 } from "../../lib/dynamic-workflow-events.ts";
@@ -32,10 +33,19 @@ function formatContextPercent(percent: number | null): string {
     : `${percent.toFixed(2)}%`;
 }
 
-interface WorkflowRow {
+function formatCost(cost: number): string {
+  return `$${(Number.isFinite(cost) && cost >= 0 ? cost : 0).toFixed(3)}`;
+}
+
+interface SidebarRow {
   text: string;
-  color: SidebarColor;
-  activity?: WorkflowRow;
+  color?: SidebarColor;
+  heading?: boolean;
+  spacer?: boolean;
+  /** Lower values are removed first when even compact section spacing will not fit. */
+  collapsePriority?: number;
+  target?: DynamicWorkflowAgentTarget;
+  optionalAfter?: Array<SidebarRow & { optionalKind: "cost" | "activity" }>;
 }
 
 function agentAppearance(
@@ -63,8 +73,8 @@ function workflowAppearance(
   }
 }
 
-function workflowRows(runs: readonly DynamicWorkflowRunSnapshot[]): WorkflowRow[] {
-  const rows: WorkflowRow[] = [];
+function workflowRows(runs: readonly DynamicWorkflowRunSnapshot[]): SidebarRow[] {
+  const rows: SidebarRow[] = [];
   for (const run of runs) {
     const runAppearance = workflowAppearance(run.status);
     rows.push({
@@ -77,12 +87,26 @@ function workflowRows(runs: readonly DynamicWorkflowRunSnapshot[]): WorkflowRow[
       const id = dynamicWorkflowDisplayText(agent.id);
       const role = dynamicWorkflowDisplayText(agent.role);
       const activity = dynamicWorkflowDisplayText(agent.activity);
+      const optionalAfter: NonNullable<SidebarRow["optionalAfter"]> = [];
+      if (typeof agent.cost === "number" && Number.isFinite(agent.cost) && agent.cost >= 0) {
+        optionalAfter.push({
+          text: `    ${formatCost(agent.cost)}`,
+          color: "dim",
+          optionalKind: "cost",
+        });
+      }
+      if (agent.status === "running" && activity) {
+        optionalAfter.push({
+          text: `    ↳ ${activity}`,
+          color: "dim",
+          optionalKind: "activity",
+        });
+      }
       rows.push({
         text: `  ${appearance.symbol} ${agent.status} ${id}${role ? ` · ${role}` : ""}`,
         color: appearance.color,
-        ...(agent.status === "running" && activity
-          ? { activity: { text: `    ↳ ${activity}`, color: "dim" as const } }
-          : {}),
+        target: { sessionId: run.sessionId, runId: run.runId, agentId: agent.id },
+        ...(optionalAfter.length ? { optionalAfter } : {}),
       });
     }
 
@@ -94,71 +118,104 @@ function workflowRows(runs: readonly DynamicWorkflowRunSnapshot[]): WorkflowRow[
   return rows;
 }
 
+function fitRows(rows: readonly SidebarRow[], height: number): SidebarRow[] {
+  let essential = [...rows];
+  if (essential.length > height) {
+    essential = essential.filter((row) => !row.spacer);
+  }
+  if (essential.length > height) {
+    const collapsible = essential
+      .filter((row) => row.collapsePriority !== undefined)
+      .sort((left, right) => left.collapsePriority! - right.collapsePriority!);
+    for (const row of collapsible) {
+      if (essential.length <= height) break;
+      essential = essential.filter((candidate) => candidate !== row);
+    }
+  }
+
+  let optionalBudget = Math.max(0, height - essential.length);
+  const selected = new Set<SidebarRow>();
+  for (const kind of ["cost", "activity"] as const) {
+    for (const row of essential) {
+      for (const optional of row.optionalAfter ?? []) {
+        if (optionalBudget === 0) break;
+        if (optional.optionalKind !== kind) continue;
+        selected.add(optional);
+        optionalBudget -= 1;
+      }
+    }
+  }
+
+  const fitted: SidebarRow[] = [];
+  for (const row of essential) {
+    fitted.push(row);
+    for (const optional of row.optionalAfter ?? []) {
+      if (selected.has(optional)) fitted.push(optional);
+    }
+  }
+  return fitted.slice(0, height);
+}
+
 export class SidebarComponent implements SidebarRenderer {
+  private readonly hitTargets = new Map<number, DynamicWorkflowAgentTarget>();
+
   constructor(
     private readonly getMetadata: () => SidebarMetadata,
     private readonly getTheme: () => Theme,
   ) {}
 
+  hitTestAgent(row: number): DynamicWorkflowAgentTarget | undefined {
+    return this.hitTargets.get(row);
+  }
+
   render(width: number, height: number): string[] {
     const metadata = this.getMetadata();
     const theme = this.getTheme();
     const contentWidth = Math.max(1, width - 3);
-    const rows: string[] = [];
+    const contextColor = contextUsageColor(metadata.contextPercent);
+    const spacer = (): SidebarRow => ({ text: "", spacer: true });
+    const heading = (text: string): SidebarRow => ({ text, heading: true });
 
-    const empty = () => rows.push("");
-    const heading = (text: string) =>
-      rows.push(theme.bold(theme.fg("accent", text)));
-    const coloredValue = (text: string, color: SidebarColor = "muted") =>
-      rows.push(theme.fg(color, truncateToWidth(text, contentWidth, "…")));
-    const value = (text: string) => coloredValue(text);
-
-    empty();
-    heading("Directory");
-    value(metadata.directory);
-    value(metadata.branchWorktree);
-    empty();
-    heading("Session");
-    value(metadata.sessionName);
+    const rows: SidebarRow[] = [
+      spacer(),
+      heading("Directory"),
+      { text: metadata.directory, collapsePriority: 3 },
+      { text: metadata.branchWorktree, collapsePriority: 1 },
+      spacer(),
+      heading("Session"),
+      { text: metadata.sessionName, collapsePriority: 2 },
+      spacer(),
+      heading("Context"),
+      {
+        text: `${metadata.contextTokens}/${metadata.contextWindow}`,
+        color: contextColor,
+      },
+      { text: formatContextPercent(metadata.contextPercent), color: contextColor },
+      { text: `Total ${formatCost(metadata.cost)}` },
+      { text: `Main ${formatCost(metadata.mainCost)}` },
+      { text: `Subagents ${formatCost(metadata.subagentCost)}` },
+      spacer(),
+      heading("Model"),
+      { text: metadata.modelName },
+      { text: metadata.thinkingLevel },
+    ];
 
     if (metadata.workflowRuns.length) {
-      empty();
-      heading("Workflow");
-
-      const essential = workflowRows(metadata.workflowRuns);
-      // Reserve the trailing Context and Model sections before spending spare
-      // rows on optional activity details.
-      const trailingMetadataRows = 9;
-      const availableRows = Math.max(0, height - rows.length - trailingMetadataRows);
-      let activityRows = Math.max(0, availableRows - essential.length);
-      for (const row of essential) {
-        coloredValue(row.text, row.color);
-        if (row.activity && activityRows > 0) {
-          coloredValue(row.activity.text, row.activity.color);
-          activityRows -= 1;
-        }
-      }
+      rows.push(spacer(), heading("Workflow"), ...workflowRows(metadata.workflowRuns));
     }
 
-    empty();
-    heading("Context");
-    const contextColor = contextUsageColor(metadata.contextPercent);
-    coloredValue(
-      `${metadata.contextTokens}/${metadata.contextWindow}`,
-      contextColor,
-    );
-    coloredValue(formatContextPercent(metadata.contextPercent), contextColor);
-    value(`$${metadata.cost.toFixed(3)}`);
-    empty();
-    heading("Model");
-    value(metadata.modelName);
-    value(metadata.thinkingLevel);
+    const visibleRows = fitRows(rows, height);
+    this.hitTargets.clear();
+    visibleRows.forEach((row, index) => {
+      if (row.target) this.hitTargets.set(index, row.target);
+    });
+    while (visibleRows.length < height) visibleRows.push({ text: "" });
 
-    const visibleRows = rows.slice(0, height);
-    while (visibleRows.length < height) visibleRows.push("");
-
-    return visibleRows.map((content) => {
-      const clipped = truncateToWidth(content, contentWidth, "");
+    return visibleRows.map((row) => {
+      const styled = row.heading
+        ? theme.bold(theme.fg("accent", row.text))
+        : theme.fg(row.color ?? "muted", truncateToWidth(row.text, contentWidth, "…"));
+      const clipped = truncateToWidth(styled, contentWidth, "");
       const padded = ` ${clipped}${" ".repeat(
         Math.max(0, contentWidth - visibleWidth(clipped)),
       )} `;

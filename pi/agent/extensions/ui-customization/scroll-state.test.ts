@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isMouseInput, parseScrollInput } from "./mouse.ts";
+import { isMouseInput, parseLeftClick, parseScrollInput } from "./mouse.ts";
 import { ChatScrollState } from "./scroll-state.ts";
 
 describe("ChatScrollState", () => {
@@ -47,5 +47,13 @@ describe("scroll input parsing", () => {
     expect(parseScrollInput("\x1b[<0;20;5M")).toBeUndefined();
     expect(isMouseInput("\x1b[<0;20;5M")).toBe(true);
     expect(isMouseInput("plain text")).toBe(false);
+  });
+
+  test("retains SGR left-click coordinates and ignores release or motion", () => {
+    expect(parseLeftClick("\x1b[<0;101;12M")).toEqual({ column: 101, row: 12 });
+    expect(parseLeftClick("\x1b[<16;101;12M")).toEqual({ column: 101, row: 12 });
+    expect(parseLeftClick("\x1b[<0;101;12m")).toBeUndefined();
+    expect(parseLeftClick("\x1b[<32;101;12M")).toBeUndefined();
+    expect(parseLeftClick("\x1b[<2;101;12M")).toBeUndefined();
   });
 });
