@@ -9,15 +9,20 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@types/shell-quote": "1.7.5",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.83.0",
     "@earendil-works/pi-coding-agent": "0.83.0",
     "@earendil-works/pi-tui": "0.83.0",
+    "acorn": "8.18.0",
+    "cc-safety-net": "1.0.6",
     "diff": "8.0.4",
     "effect": "^4.0.0-beta.99",
     "firecrawl": "^4.30.1",
+    "minimatch": "10.2.6",
+    "shell-quote": "1.10.0",
     "typebox": "^1.3.9"
   }
 }

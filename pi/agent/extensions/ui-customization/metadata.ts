@@ -5,6 +5,11 @@ import type {
   ExtensionContext,
   SessionEntry,
 } from "@earendil-works/pi-coding-agent";
+import type {
+  DynamicWorkflowRunEvent,
+  DynamicWorkflowRunSnapshot,
+  DynamicWorkflowStateEvent,
+} from "../../lib/dynamic-workflow-events.ts";
 
 export interface GitMetadata {
   branchWorktree: string;
@@ -14,12 +19,95 @@ export interface SidebarMetadata {
   directory: string;
   branchWorktree: string;
   sessionName: string;
+  workflowRuns: readonly DynamicWorkflowRunSnapshot[];
   contextTokens: string;
   contextWindow: string;
   contextPercent: string;
   cost: number;
   modelName: string;
   thinkingLevel: string;
+}
+
+export function selectSidebarWorkflowRuns(
+  runs: Iterable<DynamicWorkflowRunSnapshot>,
+  sessionId: string,
+): DynamicWorkflowRunSnapshot[] {
+  const current = Array.from(runs).filter((run) => run.sessionId === sessionId);
+  const active = current
+    .filter((run) => run.status === "running")
+    .sort((left, right) => right.startedAt - left.startedAt);
+  if (active.length) return active;
+
+  return current
+    .filter((run) => run.status !== "running")
+    .sort(
+      (left, right) =>
+        (right.finishedAt ?? right.startedAt) -
+          (left.finishedAt ?? left.startedAt) ||
+        right.startedAt - left.startedAt,
+    )
+    .slice(0, 1);
+}
+
+/** Session-scoped event state kept separate from persisted sidebar metadata. */
+export class DynamicWorkflowSidebarState {
+  private sessionId: string | undefined;
+  private runs = new Map<string, DynamicWorkflowRunSnapshot>();
+
+  beginSession(sessionId: string): void {
+    this.sessionId = sessionId;
+    this.runs.clear();
+  }
+
+  endSession(): void {
+    this.sessionId = undefined;
+    this.runs.clear();
+  }
+
+  applyRun(data: unknown): boolean {
+    const event = data as Partial<DynamicWorkflowRunEvent> | undefined;
+    const run = event?.run as Partial<DynamicWorkflowRunSnapshot> | undefined;
+    if (
+      !this.sessionId ||
+      event?.sessionId !== this.sessionId ||
+      run?.sessionId !== this.sessionId ||
+      typeof run.runId !== "string"
+    ) {
+      return false;
+    }
+
+    this.runs.set(run.runId, event.run as DynamicWorkflowRunSnapshot);
+    return true;
+  }
+
+  applyState(data: unknown): boolean {
+    const event = data as Partial<DynamicWorkflowStateEvent> | undefined;
+    if (
+      !this.sessionId ||
+      event?.sessionId !== this.sessionId ||
+      !Array.isArray(event.runs)
+    ) {
+      return false;
+    }
+
+    const next = new Map<string, DynamicWorkflowRunSnapshot>();
+    for (const run of event.runs) {
+      if (
+        run?.sessionId === this.sessionId &&
+        typeof run.runId === "string"
+      ) {
+        next.set(run.runId, run);
+      }
+    }
+    this.runs = next;
+    return true;
+  }
+
+  getVisibleRuns(): DynamicWorkflowRunSnapshot[] {
+    return this.sessionId
+      ? selectSidebarWorkflowRuns(this.runs.values(), this.sessionId)
+      : [];
+  }
 }
 
 export function calculateSessionCost(entries: readonly SessionEntry[]): number {
@@ -68,6 +156,7 @@ export function buildSidebarMetadata(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   git: GitMetadata,
+  workflowRuns: readonly DynamicWorkflowRunSnapshot[] = [],
 ): SidebarMetadata {
   const usage = ctx.getContextUsage();
   const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow;
@@ -77,6 +166,7 @@ export function buildSidebarMetadata(
     directory: formatDirectory(ctx.cwd),
     branchWorktree: git.branchWorktree || "not a git worktree",
     sessionName: sanitizeTerminalText(pi.getSessionName() ?? "unnamed"),
+    workflowRuns,
     contextTokens: formatTokenCount(usage?.tokens),
     contextWindow: formatTokenCount(contextWindow),
     contextPercent:

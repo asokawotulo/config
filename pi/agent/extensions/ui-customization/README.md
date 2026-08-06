@@ -6,7 +6,7 @@ This extension monkey-patches Pi's interactive TUI to provide:
 
 - a scrollable chat viewport;
 - an editor that stays visible while older chat is displayed; and
-- a responsive right sidebar with directory, Git worktree, session, context, cost, model, and thinking information.
+- a responsive right sidebar with directory, Git worktree, session, Dynamic Workflow subagent status, context, cost, model, and thinking information.
 
 ## Why it is version-specific
 
@@ -36,6 +36,10 @@ Disable or review this extension before upgrading Pi.
 The extension enables SGR mouse reporting while active. Hold Shift when selecting terminal text if your terminal uses Shift to bypass application mouse capture.
 
 The sidebar appears at 100 terminal columns and wider. On narrower terminals it is hidden and Pi's original footer is restored.
+
+## Dynamic workflows
+
+The sidebar hydrates from the shared Dynamic Workflow event contract at session start and updates as runs progress. It shows every active workflow in the current session; when none are active, it keeps only the newest settled workflow visible. Each subagent has a status row, and running activity may use one additional truncated row when the terminal height allows it. Workflow rows are budgeted ahead of the lower-priority Context and Model sections, and all sidebar output remains within the 30-column sidebar.
 
 ## Recovery
 

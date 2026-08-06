@@ -5,6 +5,12 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
+import {
+  DYNAMIC_WORKFLOW_RUN_EVENT,
+  DYNAMIC_WORKFLOW_STATE_EVENT,
+  DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
+  type DynamicWorkflowStateRequestEvent,
+} from "../../lib/dynamic-workflow-events.ts";
 import { PatchedLayout, resolvePi083Root } from "./layout.ts";
 import {
   DISABLE_MOUSE_REPORTING,
@@ -14,6 +20,7 @@ import {
 } from "./mouse.ts";
 import {
   buildSidebarMetadata,
+  DynamicWorkflowSidebarState,
   resolveGitMetadata,
   type GitMetadata,
 } from "./metadata.ts";
@@ -34,8 +41,17 @@ export default function uiCustomization(pi: ExtensionAPI) {
   let gitRefreshRunning = false;
   let gitRefreshPending = false;
   let warned = false;
+  const workflows = new DynamicWorkflowSidebarState();
 
   const requestRender = () => tui?.requestRender();
+
+  // Register bus listeners during extension setup so startup hydration cannot race them.
+  pi.events.on(DYNAMIC_WORKFLOW_RUN_EVENT, (data) => {
+    if (workflows.applyRun(data)) requestRender();
+  });
+  pi.events.on(DYNAMIC_WORKFLOW_STATE_EVENT, (data) => {
+    if (workflows.applyState(data)) requestRender();
+  });
 
   const refreshGit = async (ctx: ExtensionContext) => {
     currentContext = ctx;
@@ -96,7 +112,12 @@ export default function uiCustomization(pi: ExtensionAPI) {
         if (!currentContext) {
           throw new Error("ui-customization rendered after session shutdown");
         }
-        return buildSidebarMetadata(pi, currentContext, git);
+        return buildSidebarMetadata(
+          pi,
+          currentContext,
+          git,
+          workflows.getVisibleRuns(),
+        );
       },
       () => ctx.ui.theme,
     );
@@ -130,6 +151,12 @@ export default function uiCustomization(pi: ExtensionAPI) {
   };
 
   pi.on("session_start", (_event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    workflows.beginSession(sessionId);
+    requestRender();
+    const request: DynamicWorkflowStateRequestEvent = { sessionId };
+    pi.events.emit(DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT, request);
+
     if (ctx.mode !== "tui") return;
 
     if (VERSION !== SUPPORTED_PI_VERSION) {
@@ -157,5 +184,8 @@ export default function uiCustomization(pi: ExtensionAPI) {
     return { action: "continue" };
   });
   pi.on("tool_execution_end", (_event, ctx) => updateContext(ctx, true));
-  pi.on("session_shutdown", () => uninstall());
+  pi.on("session_shutdown", () => {
+    workflows.endSession();
+    uninstall();
+  });
 }
