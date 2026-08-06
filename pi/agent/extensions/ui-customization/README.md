@@ -41,6 +41,10 @@ The sidebar appears at 100 terminal columns and wider. On narrower terminals it 
 
 The sidebar hydrates from the shared Dynamic Workflow event contract at session start and updates as runs progress. It shows every active workflow in the current session; when none are active, it keeps only the newest settled workflow visible. Each subagent has a status row, and running activity may use one additional truncated row when the terminal height allows it. Workflow rows are budgeted ahead of the lower-priority Context and Model sections, and all sidebar output remains within the 30-column sidebar.
 
+## Context warnings
+
+The context used/window and percentage rows are muted at 50% or below (and when usage is unknown), accented above 50% through 80%, and shown as errors above 80%. In the active theme, accent is orange and error is red.
+
 ## Recovery
 
 Start Pi without extensions if the patched UI prevents normal use:

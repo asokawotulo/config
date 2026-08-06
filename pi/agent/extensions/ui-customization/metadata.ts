@@ -22,7 +22,7 @@ export interface SidebarMetadata {
   workflowRuns: readonly DynamicWorkflowRunSnapshot[];
   contextTokens: string;
   contextWindow: string;
-  contextPercent: string;
+  contextPercent: number | null;
   cost: number;
   modelName: string;
   thinkingLevel: string;
@@ -170,7 +170,7 @@ export function buildSidebarMetadata(
     contextTokens: formatTokenCount(usage?.tokens),
     contextWindow: formatTokenCount(contextWindow),
     contextPercent:
-      percent === null || percent === undefined ? "?" : `${percent.toFixed(2)}%`,
+      typeof percent === "number" && Number.isFinite(percent) ? percent : null,
     cost: calculateSessionCost(ctx.sessionManager.getEntries()),
     modelName: sanitizeTerminalText(ctx.model?.name ?? ctx.model?.id ?? "no model"),
     thinkingLevel: sanitizeTerminalText(

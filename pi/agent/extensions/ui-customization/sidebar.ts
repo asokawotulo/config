@@ -9,7 +9,28 @@ import {
 import type { SidebarRenderer } from "./layout.ts";
 import type { SidebarMetadata } from "./metadata.ts";
 
-type SidebarColor = "muted" | "dim" | "warning" | "success" | "error";
+type SidebarColor =
+  | "muted"
+  | "dim"
+  | "accent"
+  | "warning"
+  | "success"
+  | "error";
+
+export function contextUsageColor(
+  percent: number | null,
+): "muted" | "accent" | "error" {
+  if (percent === null || !Number.isFinite(percent) || percent <= 50) {
+    return "muted";
+  }
+  return percent <= 80 ? "accent" : "error";
+}
+
+function formatContextPercent(percent: number | null): string {
+  return percent === null || !Number.isFinite(percent)
+    ? "?"
+    : `${percent.toFixed(2)}%`;
+}
 
 interface WorkflowRow {
   text: string;
@@ -121,8 +142,12 @@ export class SidebarComponent implements SidebarRenderer {
 
     empty();
     heading("Context");
-    value(`${metadata.contextTokens}/${metadata.contextWindow}`);
-    value(metadata.contextPercent);
+    const contextColor = contextUsageColor(metadata.contextPercent);
+    coloredValue(
+      `${metadata.contextTokens}/${metadata.contextWindow}`,
+      contextColor,
+    );
+    coloredValue(formatContextPercent(metadata.contextPercent), contextColor);
     value(`$${metadata.cost.toFixed(3)}`);
     empty();
     heading("Model");

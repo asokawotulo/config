@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type {
   ExtensionAPI,
+  ExtensionContext,
   SessionEntry,
   Theme,
 } from "@earendil-works/pi-coding-agent";
@@ -11,6 +12,7 @@ import type {
   DynamicWorkflowStatus,
 } from "../../lib/dynamic-workflow-events.ts";
 import {
+  buildSidebarMetadata,
   calculateSessionCost,
   DynamicWorkflowSidebarState,
   formatDirectory,
@@ -18,7 +20,7 @@ import {
   resolveGitMetadata,
   type SidebarMetadata,
 } from "./metadata.ts";
-import { SidebarComponent } from "./sidebar.ts";
+import { contextUsageColor, SidebarComponent } from "./sidebar.ts";
 
 function entry(value: unknown): SessionEntry {
   return value as SessionEntry;
@@ -69,7 +71,7 @@ function sidebarMetadata(
     workflowRuns,
     contextTokens: "0",
     contextWindow: "272K",
-    contextPercent: "0.00%",
+    contextPercent: 0,
     cost: 1.2345,
     modelName: "gpt-5.6-sol",
     thinkingLevel: "medium",
@@ -80,6 +82,18 @@ function identityTheme(): Theme {
   const identity = (text: string) => text;
   return {
     fg: (_color: string, text: string) => text,
+    bg: (_color: string, text: string) => text,
+    bold: identity,
+  } as unknown as Theme;
+}
+
+function trackingTheme(calls: Array<{ color: string; text: string }>): Theme {
+  const identity = (text: string) => text;
+  return {
+    fg: (color: string, text: string) => {
+      calls.push({ color, text });
+      return text;
+    },
     bg: (_color: string, text: string) => text,
     bold: identity,
   } as unknown as Theme;
@@ -102,6 +116,25 @@ describe("sidebar metadata", () => {
     expect(formatTokenCount(272_000)).toBe("272K");
     expect(formatTokenCount(null)).toBe("?");
     expect(formatDirectory("/Users/test/project", "/Users/test")).toBe("~/project");
+  });
+
+  test("carries the raw context percentage", () => {
+    const pi = {
+      getSessionName: () => "test session",
+      getThinkingLevel: () => "off",
+    } as unknown as ExtensionAPI;
+    const ctx = {
+      cwd: "/repo",
+      getContextUsage: () => ({
+        tokens: 10_000,
+        contextWindow: 100_000,
+        percent: 63.125,
+      }),
+      sessionManager: { getEntries: () => [] },
+    } as unknown as ExtensionContext;
+
+    expect(buildSidebarMetadata(pi, ctx, { branchWorktree: "main" }).contextPercent)
+      .toBe(63.125);
   });
 
   test("formats linked worktrees as branch/worktree", async () => {
@@ -163,6 +196,40 @@ describe("dynamic workflow sidebar state", () => {
 });
 
 describe("SidebarComponent", () => {
+  test("uses context warning colors at the exact boundaries", () => {
+    expect(contextUsageColor(null)).toBe("muted");
+    expect(contextUsageColor(Number.NaN)).toBe("muted");
+    expect(contextUsageColor(50)).toBe("muted");
+    expect(contextUsageColor(50.01)).toBe("accent");
+    expect(contextUsageColor(80)).toBe("accent");
+    expect(contextUsageColor(80.01)).toBe("error");
+  });
+
+  test("colors both context rows while preserving percentage formatting", () => {
+    const cases: Array<[number | null, string, string]> = [
+      [null, "muted", "?"],
+      [50, "muted", "50.00%"],
+      [50.01, "accent", "50.01%"],
+      [80, "accent", "80.00%"],
+      [80.01, "error", "80.01%"],
+    ];
+
+    for (const [percent, color, formattedPercent] of cases) {
+      const calls: Array<{ color: string; text: string }> = [];
+      const metadata = sidebarMetadata();
+      metadata.contextPercent = percent;
+      const sidebar = new SidebarComponent(
+        () => metadata,
+        () => trackingTheme(calls),
+      );
+
+      sidebar.render(30, 20);
+
+      expect(calls).toContainEqual({ color, text: "0/272K" });
+      expect(calls).toContainEqual({ color, text: formattedPercent });
+    }
+  });
+
   test("renders context cost and respects width", () => {
     const sidebar = new SidebarComponent(
       () => sidebarMetadata(),
