@@ -1,6 +1,6 @@
 ---
 name: dynamic-workflows
-description: Designs and launches editable, statically declared DAGs of specialized Pi subagents with role-based tools, skills, command permissions, dependency ordering, and parallel execution. Use when a task benefits from multiple independent investigations, implementation/review phases, or explicit multi-agent coordination.
+description: Designs and launches editable, statically declared DAGs of specialized Pi subagents with role-based tools and skills, dependency ordering, CC Safety Net command inspection, and parallel execution. Use when a task benefits from multiple independent investigations, implementation/review phases, or explicit multi-agent coordination.
 ---
 
 # Dynamic Workflows
@@ -25,7 +25,7 @@ Do not use a workflow for a small, localized task that the main agent can comple
 2. Inspect available roles when their capabilities are not already known:
    - global roles: `~/.pi/agent/roles/*.md`;
    - in this configuration repository: `pi/agent/roles/*.md`.
-3. Respect each role's fixed model, tools, skills, prompt, and command policy.
+3. Respect each role's fixed model, tools, skills, and prompt.
 4. Identify the smallest relevant file set before defining agents; avoid making every child rediscover the repository.
 5. Decide which tasks are independent and which require earlier outputs.
 6. Avoid parallel write-capable agents editing the same files. Prefer parallel read-only research followed by one implementation owner.
@@ -89,8 +89,7 @@ Optional fields:
 
 - `contextFiles`: bounded worktree-relative files preloaded into the child context; identify these before launch and keep the set minimal;
 - `tools`: a subset of the role's tools;
-- `skills`: a subset of the role's skills;
-- `permissions.commands`: a complete command-rule map containing `"*"`; it can only make the role policy stricter.
+- `skills`: a subset of the role's skills.
 
 Agents whose dependencies are satisfied run in parallel, up to the extension's concurrency limit. Array order controls display and same-wave launch order, not dependency semantics.
 
@@ -117,14 +116,14 @@ Prefer least privilege:
 - provide `contextFiles` and tell the agent to use them first, exploring only when they are insufficient;
 - workflow-level tools and skills cannot exceed the selected role.
 
-Bash commands are checked by both the workflow command policy and `cc-safety-net explain --json`. An `ask` decision or CC Safety Net block opens a serialized user prompt with **Allow once**, **Edit command**, and **Deny**. Never design a workflow that depends on the user approving a destructive command.
+Every Bash/Shell command is inspected solely by `cc-safety-net explain --json`. Allowed commands run automatically. A blocked command opens a serialized user prompt that shows CC Safety Net's reason and offers **Allow once**, **Edit command**, and **Deny**; edited commands are re-analyzed. Never design a workflow that depends on the user approving a destructive command.
 
 ## Approval and Execution
 
 After calling `dynamic_workflow`:
 
 1. The user receives a structured form rather than raw code by default.
-2. They can edit metadata, agents, roles, prompts, dependencies, tools, skills, and command overrides.
+2. They can edit metadata, agents, roles, prompts, dependencies, tools, and skills.
 3. The Review section must validate before approval.
 4. Cancellation means no subagent runs; acknowledge it without immediately resubmitting.
 5. During execution, the sidebar shows current-session workflows and subagent states.

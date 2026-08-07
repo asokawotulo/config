@@ -18,7 +18,6 @@ import {
 const role: RoleDefinition = {
   name: "reader", description: "reads", model: "openai-codex/gpt-5.6-sol",
   tools: ["read", "bash"], skills: ["diff"], prompt: "Read only", filePath: "/reader.md",
-  permissions: { commands: { "*": "deny", "rg *": "allow" } },
 };
 
 const source = `export const workflow = {
@@ -43,11 +42,13 @@ describe("dynamic workflow parser", () => {
     expect(() => parseWorkflow(`export const workflow = makeWorkflow()`)).toThrow("static");
   });
 
-  test("rejects cycles and permission elevation", () => {
+  test("rejects cycles, tool elevation, and command permission fields", () => {
     const cyclic = source.replace('dependsOn: []', 'dependsOn: ["b"]');
     expect(() => resolveWorkflow(cyclic, new Map([["reader", role]]))).toThrow("cycle");
     const elevated = source.replace('tools: ["read"]', 'tools: ["write"]');
     expect(() => resolveWorkflow(elevated, new Map([["reader", role]]))).toThrow("cannot add write");
+    const permissions = source.replace("dependsOn: []", 'dependsOn: [], permissions: { commands: { "*": "allow" } }');
+    expect(() => parseWorkflow(permissions)).toThrow("unsupported field permissions");
   });
 
   test("resolves bounded worktree context into a reusable soft-scope bundle", () => {

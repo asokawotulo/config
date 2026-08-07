@@ -1,5 +1,5 @@
 import { isAbsolute } from "node:path";
-import type { PermissionAction, WorkflowAgentDefinition, WorkflowDefinition } from "../types.ts";
+import type { WorkflowAgentDefinition, WorkflowDefinition } from "../types.ts";
 import {
   AGENT_ID_PATTERN,
   MAX_CONTEXT_FILE_PATH_BYTES,
@@ -19,7 +19,6 @@ import type {
 } from "./types.ts";
 
 const MAX_AGENTS = 32;
-const ACTIONS = new Set<PermissionAction>(["allow", "ask", "deny"]);
 function cloneAgent(agent: WorkflowAgentDefinition): WorkflowAgentDraft {
   return {
     id: agent.id,
@@ -29,11 +28,6 @@ function cloneAgent(agent: WorkflowAgentDefinition): WorkflowAgentDraft {
     ...(agent.contextFiles === undefined ? {} : { contextFiles: [...agent.contextFiles] }),
     ...(agent.tools === undefined ? {} : { tools: [...agent.tools] }),
     ...(agent.skills === undefined ? {} : { skills: [...agent.skills] }),
-    ...(agent.permissions === undefined ? {} : {
-      permissions: {
-        ...(agent.permissions.commands === undefined ? {} : { commands: { ...agent.permissions.commands } }),
-      },
-    }),
   };
 }
 
@@ -86,7 +80,6 @@ export function addAgent(
     ...(agent.contextFiles === undefined ? {} : { contextFiles: agent.contextFiles }),
     ...(agent.tools === undefined ? {} : { tools: agent.tools }),
     ...(agent.skills === undefined ? {} : { skills: agent.skills }),
-    ...(agent.permissions === undefined ? {} : { permissions: agent.permissions }),
   });
   draft.agents.splice(index, 0, inserted);
   return inserted;
@@ -222,20 +215,6 @@ export function validateWorkflowDraft(draft: WorkflowDraft, roles: RoleCatalog):
     }
     if (agent.tools !== undefined) validateStringList(agent.tools, `${base}.tools`, issues, role?.tools);
     if (agent.skills !== undefined) validateStringList(agent.skills, `${base}.skills`, issues, role?.skills);
-
-    if (agent.permissions !== undefined) {
-      const commands = agent.permissions.commands;
-      if (!commands || typeof commands !== "object" || Array.isArray(commands)) {
-        issue(issues, `${base}.permissions.commands`, "Command rules are required when permissions are set");
-      } else {
-        if (!("*" in commands)) issue(issues, `${base}.permissions.commands`, "Command rules must define a \"*\" rule");
-        for (const [pattern, action] of Object.entries(commands)) {
-          if (!pattern.trim() || pattern !== pattern.trim()) issue(issues, `${base}.permissions.commands`, "Command patterns must be non-empty and trimmed");
-          if (["__proto__", "constructor", "prototype"].includes(pattern)) issue(issues, `${base}.permissions.commands`, `Invalid command pattern ${pattern}`);
-          if (!ACTIONS.has(action)) issue(issues, `${base}.permissions.commands.${pattern}`, "Action must be allow, ask, or deny");
-        }
-      }
-    }
 
     if (typeof agent.prompt === "string") {
       const malformed = invalidAgentOutputPlaceholder(agent.prompt);

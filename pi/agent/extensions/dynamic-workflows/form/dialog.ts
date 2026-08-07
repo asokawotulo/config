@@ -7,7 +7,7 @@ import {
   type EditorTheme,
   type TUI,
 } from "@earendil-works/pi-tui";
-import type { PermissionAction, ResolvedWorkflow, RoleDefinition } from "../types.ts";
+import type { ResolvedWorkflow, RoleDefinition } from "../types.ts";
 import {
   addAgent,
   deleteAgent,
@@ -33,7 +33,6 @@ type Row = {
   value?: string;
   activate?: () => void;
   adjust?: (direction: -1 | 1) => void;
-  remove?: () => void;
 };
 
 export interface WorkflowDialogOptions {
@@ -62,17 +61,6 @@ function cycle<T>(values: readonly T[], current: T, direction: -1 | 1): T | unde
   if (!values.length) return undefined;
   const index = Math.max(0, values.indexOf(current));
   return values[(index + direction + values.length) % values.length];
-}
-
-function replaceCommandPattern(agent: WorkflowAgentDraft, oldPattern: string, newPattern: string): void {
-  const commands = agent.permissions?.commands;
-  const pattern = newPattern.trim();
-  if (!commands) throw new Error("Command overrides are not enabled");
-  if (!pattern || ["__proto__", "constructor", "prototype"].includes(pattern)) throw new Error("Invalid command pattern");
-  if (pattern !== oldPattern && Object.hasOwn(commands, pattern)) throw new Error(`Duplicate command pattern ${pattern}`);
-  const replaced: Record<string, PermissionAction> = {};
-  for (const [key, action] of Object.entries(commands)) replaced[key === oldPattern ? pattern : key] = action;
-  agent.permissions = { commands: replaced };
 }
 
 function compact(value: string, empty = "none"): string {
@@ -298,31 +286,6 @@ export class WorkflowDialogComponent extends DialogComponent<ResolvedWorkflow> {
     if (agent.skills !== undefined) {
       for (const skill of role?.skills ?? []) rows.push(this.listToggleRow("Skill", skill, agent.skills, (value) => { agent.skills = value; }));
     }
-
-    const commands = agent.permissions?.commands;
-    rows.push({
-      label: `Command overrides ${checkbox(this.theme, commands !== undefined)}`,
-      value: commands ? `${Object.keys(commands).length} structured rules` : "inherit role policy",
-      activate: () => this.mutate(() => {
-        if (commands) delete agent.permissions;
-        else agent.permissions = { commands: { "*": "deny" } };
-      }),
-    });
-    if (commands) {
-      for (const [pattern, action] of Object.entries(commands)) {
-        rows.push({
-          label: `Command ${pattern}`,
-          value: action,
-          activate: () => this.beginEdit(`Command pattern (${action})`, pattern, (value) => replaceCommandPattern(agent, pattern, value)),
-          adjust: (direction) => this.mutate(() => {
-            const next = cycle<PermissionAction>(["allow", "ask", "deny"], action, direction);
-            if (next) commands[pattern] = next;
-          }),
-          ...(pattern === "*" ? {} : { remove: () => this.mutate(() => { delete commands[pattern]; }) }),
-        });
-      }
-      rows.push({ label: "Add command rule", value: "pattern → action", activate: () => this.addCommandRule(agent) });
-    }
     rows.push(
       { label: "Add agent", value: "after current list", activate: () => this.addNewAgent() },
       {
@@ -366,17 +329,6 @@ export class WorkflowDialogComponent extends DialogComponent<ResolvedWorkflow> {
       if (agent.tools) agent.tools = agent.tools.filter((tool) => role.tools.includes(tool));
       if (agent.skills) agent.skills = agent.skills.filter((skill) => role.skills.includes(skill));
     });
-  }
-
-  private addCommandRule(agent: WorkflowAgentDraft): void {
-    const commands = agent.permissions?.commands;
-    if (!commands) return;
-    let number = 1;
-    while (Object.hasOwn(commands, `command-${number} *`)) number++;
-    const pattern = `command-${number} *`;
-    this.mutate(() => { commands[pattern] = "ask"; });
-    this.selectedRow = Math.max(0, this.agentRows().findIndex((row) => row.label === `Command ${pattern}`));
-    this.beginEdit("Command pattern", pattern, (value) => replaceCommandPattern(agent, pattern, value));
   }
 
   private addNewAgent(): void {
@@ -473,15 +425,8 @@ export class WorkflowDialogComponent extends DialogComponent<ResolvedWorkflow> {
         return;
       }
       if (matchesKey(data, "x")) {
-        const row = this.rows()[this.selectedRow];
-        if (row?.remove) row.remove();
-        else if (row?.label.startsWith("Command ")) {
-          this.actionError = "The required * command rule cannot be deleted";
-          this.changed();
-        } else {
-          const agent = this.currentAgent();
-          if (agent) this.mutate(() => { deleteAgent(this.draft!, agent.id); this.selectedAgent = Math.max(0, this.selectedAgent - 1); });
-        }
+        const agent = this.currentAgent();
+        if (agent) this.mutate(() => { deleteAgent(this.draft!, agent.id); this.selectedAgent = Math.max(0, this.selectedAgent - 1); });
         return;
       }
     }
@@ -535,7 +480,7 @@ export class WorkflowDialogComponent extends DialogComponent<ResolvedWorkflow> {
       }
     }
     if (this.section === "agents") {
-      lines.push("", this.theme.fg("dim", "[ / ] agent • a add • x delete row/agent • Ctrl+↑↓ reorder"));
+      lines.push("", this.theme.fg("dim", "[ / ] agent • a add • x delete agent • Ctrl+↑↓ reorder"));
     }
     return lines;
   }
@@ -555,9 +500,8 @@ export class WorkflowDialogComponent extends DialogComponent<ResolvedWorkflow> {
           `effective skills: ${agent.effectiveSkills.join(", ") || "none"}`,
           `approved context: ${agent.contextFiles?.join(", ") || "none"}`,
           `context bounds: ${MAX_CONTEXT_FILES_PER_AGENT} files / ${MAX_CONTEXT_BYTES_PER_AGENT} aggregate bytes per agent`,
-          `role commands: ${JSON.stringify(agent.resolvedRole.permissions.commands)}`,
-          `workflow commands: ${agent.permissions?.commands ? JSON.stringify(agent.permissions.commands) : "inherit"}`,
-          "effective commands: stricter matching decision from role and workflow rules",
+          "command safety: Bash/Shell commands are inspected by CC Safety Net",
+          "blocked commands require an explicit parent-user decision",
         );
       }
       lines.push("", this.theme.fg("success", "Enter — approve canonical workflow and run"));

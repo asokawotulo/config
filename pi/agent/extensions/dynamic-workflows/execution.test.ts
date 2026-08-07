@@ -41,7 +41,6 @@ const role: RoleDefinition = {
   thinking: "high",
   tools: ["read", "bash"],
   skills: [],
-  permissions: { commands: { "*": "deny" } },
   prompt: "Read carefully",
   filePath: "/reader.md",
 };

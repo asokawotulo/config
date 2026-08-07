@@ -270,7 +270,7 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
     description: [
       "Propose a complete static subagent DAG and run it only after editable user approval.",
       "The script must be exactly `export const workflow = { name, description?, agents }` using static literals.",
-      "Each agent requires id, role, prompt, and dependsOn. Optional contextFiles preload approved worktree files; tools, skills, and permissions.commands may only narrow its role.",
+      "Each agent requires id, role, prompt, and dependsOn. Optional contextFiles preload approved worktree files; tools and skills may only narrow its role.",
       "Declare every agent up front. Agents in the same dependency wave run in parallel. Use {{agents.ID.output}} in dependent prompts.",
     ].join(" "),
     promptSnippet: "Propose an editable, statically declared DAG of isolated Pi subagents",

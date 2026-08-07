@@ -1,4 +1,4 @@
-import type { PermissionAction, RoleDefinition, WorkflowAgentDefinition, WorkflowDefinition } from "../types.ts";
+import type { RoleDefinition, WorkflowAgentDefinition, WorkflowDefinition } from "../types.ts";
 
 /** A mutable, UI-only copy of a parsed workflow. */
 export type WorkflowDraft = WorkflowDefinition;
@@ -21,5 +21,3 @@ export interface DraftValidationResult {
 }
 
 export type RoleCatalog = ReadonlyMap<string, RoleDefinition>;
-
-export const PERMISSION_ACTIONS: readonly PermissionAction[] = ["allow", "ask", "deny"];

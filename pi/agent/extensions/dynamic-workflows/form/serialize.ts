@@ -10,12 +10,6 @@ function canonicalAgent(agent: WorkflowAgentDefinition): WorkflowAgentDefinition
     ...(agent.contextFiles === undefined ? {} : { contextFiles: [...agent.contextFiles] }),
     ...(agent.tools === undefined ? {} : { tools: [...agent.tools] }),
     ...(agent.skills === undefined ? {} : { skills: [...agent.skills] }),
-    ...(agent.permissions === undefined ? {} : {
-      permissions: {
-        // Rule order breaks equal-specificity policy ties and is therefore semantic.
-        ...(agent.permissions.commands === undefined ? {} : { commands: { ...agent.permissions.commands } }),
-      },
-    }),
   };
 }
 

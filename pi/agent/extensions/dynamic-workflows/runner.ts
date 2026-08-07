@@ -108,7 +108,7 @@ function permissionExtension(options: RunAgentOptions): InlineExtension {
         const verdict = await authorizeCommand({
           command: input.command,
           cwd: options.cwd,
-          agent: options.agent,
+          agentId: options.agent.id,
           ctx: options.parentContext,
           queue: options.approvalQueue,
           signal: options.signal,
@@ -232,7 +232,7 @@ async function brokerPermissionRequests(options: RunAgentOptions, processed: Set
       verdict = await authorizeCommand({
         command: request.command,
         cwd: options.cwd,
-        agent: options.agent,
+        agentId: options.agent.id,
         ctx: options.parentContext,
         queue: options.approvalQueue,
         signal: options.signal,

@@ -1,13 +1,8 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import type { DynamicWorkflowAgentStatus, DynamicWorkflowStatus } from "../../lib/dynamic-workflow-events.ts";
 
-export type PermissionAction = "allow" | "ask" | "deny";
 export type AgentStatus = DynamicWorkflowAgentStatus;
 export type WorkflowStatus = DynamicWorkflowStatus;
-
-export interface CommandPermissions {
-  commands: Record<string, PermissionAction>;
-}
 
 export interface RoleDefinition {
   name: string;
@@ -16,7 +11,6 @@ export interface RoleDefinition {
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools: string[];
   skills: string[];
-  permissions: CommandPermissions;
   prompt: string;
   filePath: string;
 }
@@ -30,7 +24,6 @@ export interface WorkflowAgentDefinition {
   contextFiles?: string[];
   tools?: string[];
   skills?: string[];
-  permissions?: Partial<CommandPermissions>;
 }
 
 export interface WorkflowDefinition {
@@ -72,8 +65,8 @@ export interface PermissionDecisionRecord {
   at: number;
   agentId: string;
   command: string;
-  source: "workflow-policy" | "cc-safety-net";
-  action: PermissionAction;
+  source: "cc-safety-net";
+  action: "allow" | "deny";
   reason: string;
   segment?: string;
   overridden?: boolean;

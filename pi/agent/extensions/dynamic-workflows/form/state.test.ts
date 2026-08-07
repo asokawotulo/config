@@ -12,7 +12,7 @@ import {
 
 const role: RoleDefinition = {
   name: "reader", description: "Reads", model: "test/model", tools: ["read"], skills: ["diff"],
-  permissions: { commands: { "*": "deny" } }, prompt: "Read", filePath: "/reader.md",
+  prompt: "Read", filePath: "/reader.md",
 };
 
 const definition: WorkflowDefinition = {
@@ -51,19 +51,17 @@ describe("workflow form draft state", () => {
     expect(JSON.stringify(draft)).toBe(snapshot);
   });
 
-  test("validates roles, narrowing, command rules, cycles, and output references", () => {
+  test("validates roles, narrowing, cycles, and output references", () => {
     const roles = new Map([[role.name, role]]);
     const valid = createWorkflowDraft(definition);
     valid.agents[1]!.tools = ["read"];
     valid.agents[1]!.skills = [];
-    valid.agents[1]!.permissions = { commands: { "*": "deny" } };
     expect(validateWorkflowDraft(valid, roles)).toEqual({ valid: true, issues: [] });
 
     const invalid = createWorkflowDraft(definition);
     invalid.agents[0]!.role = "missing";
     invalid.agents[0]!.dependsOn = ["consumer"];
     invalid.agents[1]!.tools = ["write"];
-    invalid.agents[0]!.permissions = { commands: { nope: "allow" } };
     invalid.agents[1]!.prompt = "Use {{agents.missing.output}}";
     invalid.agents[1]!.contextFiles = ["../outside.ts", "same.ts", "same.ts"];
     const result = validateWorkflowDraft(invalid, roles);
@@ -71,7 +69,6 @@ describe("workflow form draft state", () => {
     expect(result.issues.map((item) => item.message).join("\n")).toContain("Unknown role");
     expect(result.issues.map((item) => item.message).join("\n")).toContain("cycle");
     expect(result.issues.map((item) => item.message).join("\n")).toContain("not allowed by the role");
-    expect(result.issues.map((item) => item.message).join("\n")).toContain("must define a \"*\" rule");
     expect(result.issues.map((item) => item.message).join("\n")).toContain("unknown agent missing");
     expect(result.issues.map((item) => item.message).join("\n")).toContain("workflow worktree");
     expect(result.issues.map((item) => item.message).join("\n")).toContain("duplicate value same.ts");

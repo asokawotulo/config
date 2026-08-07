@@ -23,7 +23,6 @@ const role: RoleDefinition = {
   model: "test/model",
   tools: ["read", "grep"],
   skills: ["diff"],
-  permissions: { commands: { "*": "deny", "rg *": "allow" } },
   prompt: "Read",
   filePath: "/reader.md",
 };
@@ -33,7 +32,7 @@ const source = `export const workflow = {
   description: "A safe workflow",
   agents: [
     { id: "first", role: "reader", prompt: "Inspect", dependsOn: [], contextFiles: ["src/first.ts"] },
-    { id: "second", role: "reader", prompt: "Use {{agents.first.output}}", dependsOn: ["first"], tools: ["read"], skills: [], permissions: { commands: { "*": "deny" } } }
+    { id: "second", role: "reader", prompt: "Use {{agents.first.output}}", dependsOn: ["first"], tools: ["read"], skills: [] }
   ]
 };`;
 
@@ -105,7 +104,9 @@ describe("workflow approval dialog", () => {
     expect(review).toContain("Waves: 1[first] → 2[second]");
     expect(review).toContain("approved context: src/first.ts");
     expect(review).toContain("16 files / 262144 aggregate bytes");
-    expect(review).toContain("effective commands");
+    expect(review).toContain("command safety: Bash/Shell commands are inspected by CC Safety Net");
+    expect(review).toContain("blocked commands require an explicit parent-user decision");
+    expect(review).not.toContain("Command overrides");
     state.component.handleInput("\r");
     expect(state.completed()).toBe(true);
     expect(state.result()?.source.startsWith("export const workflow = {")).toBe(true);

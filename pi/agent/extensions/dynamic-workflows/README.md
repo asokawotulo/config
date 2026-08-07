@@ -49,12 +49,11 @@ The form uses a two-column agent navigator and detail view on wide terminals, an
 - workflow name and description;
 - agent id, role, multiline prompt, dependencies, and one-path-per-line context files;
 - role-narrowed tools and skills;
-- ordered command override rules (`pattern → allow | ask | deny`);
 - adding, deleting, navigating, and reordering agents.
 
 Use **Tab/Shift+Tab** to move among Workflow, Agents, and Review, arrow keys to navigate controls, **Enter** to edit or toggle, **[ / ]** to change agents, **a** to add, **x** to delete, and **Ctrl+Up/Down** to reorder. Embedded multiline editors support terminal cursor/IME propagation.
 
-The final Review shows dependency waves, resolved models and resources, approved context paths and bounds, and the effective command-policy composition. Approval is disabled while draft, role/resource, DAG, output-reference, or policy errors remain. On approval the draft is serialized into canonical static source, then `resolveWorkflow` and runtime model/tool/skill/context validation run again before execution.
+The final Review shows dependency waves, resolved models and resources, approved context paths and bounds, and the CC Safety Net command-inspection contract. Approval is disabled while draft, role/resource, DAG, or output-reference errors remain. On approval the draft is serialized into canonical static source, then `resolveWorkflow` and runtime model/tool/skill/context validation run again before execution.
 
 Press **r** to use raw source explicitly. Raw mode is also the recovery path when the proposed source cannot be parsed; source must parse back into the structured form and pass the same review before it can run.
 
@@ -69,18 +68,11 @@ model: openai-codex/gpt-5.6-sol
 thinking: high
 tools: [read, grep, find, ls, bash]
 skills: [diff]
-permissions:
-  commands:
-    "*": deny
-    "git": ask
-    "git status": allow
-    "git diff *": allow
-    "rg *": allow
 ---
 Role-specific system prompt.
 ```
 
-A workflow agent may provide narrower `tools`, `skills`, and `permissions.commands`. Tool and skill additions are rejected. Dynamic command policy is intersected with the role policy, so it cannot elevate a denied or ask-only command.
+A workflow agent may provide narrower `tools` and `skills`; additions are rejected. Agent-level command policies are not supported.
 
 ## Command safety
 
@@ -90,12 +82,12 @@ Every Bash command is passed as a direct argument to the locally installed:
 cc-safety-net explain --json <command>
 ```
 
-The subprocess runs in strict mode. Its structured parse supplies the command segments used by the workflow allowlist. Analysis failure, malformed JSON, invalid configuration, or unsupported dynamic tokens fail closed.
+The subprocess runs in strict mode and is the sole Bash/Shell command inspector. Allowed commands run automatically. Analysis failure, malformed JSON, or invalid configuration fails closed.
 
-When the workflow policy says `ask`, or CC Safety Net blocks an otherwise allowed command, the user can:
+When CC Safety Net blocks a command, the parent alert includes the command, Safety Net's reason, and its blocked segment when available. The user can:
 
 - **Allow once** — scoped to that call and recorded in the run artifact.
-- **Edit command** — both policies are run again on the edited command.
+- **Edit command** — CC Safety Net analyzes the edited command again.
 - **Deny**.
 
 Parallel prompts are serialized. Headless runs cannot approve commands.
