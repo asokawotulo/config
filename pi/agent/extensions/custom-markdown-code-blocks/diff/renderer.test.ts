@@ -2,13 +2,16 @@ import { describe, expect, test } from "bun:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { Markdown, visibleWidth } from "@earendil-works/pi-tui";
 import { installCustomMarkdownCodeBlocks } from "../markdown-renderer.ts";
-import { diffCodeBlockRenderer } from "./index.ts";
-import { alignUnifiedDiff } from "./renderer.ts";
+import {
+  alignUnifiedDiff,
+  renderSideBySideDiff,
+} from "../../../lib/side-by-side-diff/renderer.ts";
 import {
   applyDiffBackground,
   foregroundAnsiToBackground,
   getDiffBackgroundAnsi,
-} from "./theme.ts";
+} from "../../../lib/side-by-side-diff/theme.ts";
+import { diffCodeBlockRenderer } from "./index.ts";
 
 const identity = (text: string) => text;
 const stripAnsi = (text: string) => text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
@@ -120,6 +123,54 @@ describe("side-by-side diff code block", () => {
         changedBytes: [{ start: 24, end: 48 }],
       },
     });
+  });
+
+  test("tracks hunk line numbers and keeps metadata inside both panes", () => {
+    const code =
+      "--- src/example.ts\n" +
+      "+++ src/example.ts\n" +
+      "@@ -118,2 +119,2 @@ function example\n" +
+      " shared();\n" +
+      "-oldValue();\n" +
+      "+newValue();";
+    const rows = alignUnifiedDiff(code);
+
+    expect(rows[0]).toEqual({
+      type: "meta",
+      before: "--- src/example.ts",
+      after: "+++ src/example.ts",
+    });
+    expect(rows[1]).toEqual({
+      type: "meta",
+      before: "@@ -118,2 @@ function example",
+      after: "@@ +119,2 @@ function example",
+    });
+    expect(rows[2]).toMatchObject({
+      type: "pair",
+      before: { lineNumber: 118 },
+      after: { lineNumber: 119 },
+    });
+    expect(rows[3]).toMatchObject({
+      type: "pair",
+      before: { lineNumber: 119, marker: "-" },
+      after: { lineNumber: 120, marker: "+" },
+    });
+
+    const whiteLineNumberTheme = {
+      ...theme,
+      fg: (color: string, text: string) =>
+        color === "text" ? `\x1b[37m${text}\x1b[39m` : text,
+    } as unknown as Theme;
+    const rawRendered = renderSideBySideDiff({
+      code,
+      width: 100,
+      paddingX: 0,
+      theme: whiteLineNumberTheme,
+    })!;
+    const rendered = rawRendered.map(stripAnsi);
+    expect(rendered.some((line) => line.includes("--- src/example.ts") && line.includes("+++ src/example.ts"))).toBe(true);
+    expect(rendered.some((line) => line.includes("119 - │ oldValue();") && line.includes("120 + │ newValue();"))).toBe(true);
+    expect(rawRendered.some((line) => line.includes("\x1b[37m119\x1b[39m"))).toBe(true);
   });
 
   test("keeps byte ranges on UTF-8 character boundaries", () => {
@@ -389,6 +440,19 @@ describe("side-by-side diff code block", () => {
     expect(lines.some((line) => line.includes("typescript:const mode = 'new';"))).toBe(true);
     expect(lines.some((line) => line.includes("\x1b[48;2;53;28;36m"))).toBe(true);
     expect(lines.some((line) => line.includes("\x1b[48;2;31;48;29m"))).toBe(true);
+  });
+
+  test("reports omitted rows when a caller bounds a preview", () => {
+    const lines = renderSideBySideDiff({
+      code: "-one\n+two\n three\n four",
+      width: 100,
+      paddingX: 0,
+      theme,
+      maxRows: 1,
+    });
+
+    expect(lines?.some((line) => stripAnsi(line).includes("… 2 more rows"))).toBe(true);
+    expect(lines?.every((line) => visibleWidth(line) <= 100)).toBe(true);
   });
 
   test("falls back to unified rendering in narrow terminals", () => {

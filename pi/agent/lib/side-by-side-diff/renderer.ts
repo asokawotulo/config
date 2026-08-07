@@ -5,15 +5,16 @@ import {
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { diffArrays } from "diff";
-import type { CodeBlockRenderContext } from "../types.ts";
 import { applyDiffBackground, getDiffBackgroundAnsi } from "./theme.ts";
 import type {
   DiffBackgroundColorKey,
   DiffByteRange,
   DiffCell,
+  DiffHighlightCode,
   DiffRow,
   DiffSourceRow,
   HighlightedDiffPair,
+  SideBySideDiffRenderContext,
 } from "./types.ts";
 
 const MIN_SIDE_BY_SIDE_WIDTH = 72;
@@ -228,15 +229,58 @@ function isMetadataLine(line: string): boolean {
   );
 }
 
+function hunkStarts(line: string): { oldLine: number; newLine: number; before: string; after: string } | undefined {
+  const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/.exec(line);
+  if (!match) return undefined;
+  const context = match[5] ?? "";
+  return {
+    oldLine: Number(match[1]),
+    newLine: Number(match[3]),
+    before: `@@ -${match[1]}${match[2] ? `,${match[2]}` : ""} @@${context}`,
+    after: `@@ +${match[3]}${match[4] ? `,${match[4]}` : ""} @@${context}`,
+  };
+}
+
+function addReplacementLineNumbers(
+  rows: DiffRow[],
+  oldStart: number | undefined,
+  newStart: number | undefined,
+): void {
+  let oldLine = oldStart;
+  let newLine = newStart;
+  for (const row of rows) {
+    if (row.type !== "pair") continue;
+    if (row.before.marker === "-" && oldLine !== undefined) row.before.lineNumber = oldLine++;
+    if (row.after.marker === "+" && newLine !== undefined) row.after.lineNumber = newLine++;
+  }
+}
+
 export function alignUnifiedDiff(code: string): DiffRow[] {
   const lines = code.split("\n");
   const rows: DiffRow[] = [];
+  let oldLine: number | undefined;
+  let newLine: number | undefined;
 
   for (let index = 0; index < lines.length; ) {
     const line = lines[index] ?? "";
+    const hunk = hunkStarts(line);
+
+    if (line.startsWith("--- ") && (lines[index + 1] ?? "").startsWith("+++ ")) {
+      rows.push({ type: "meta", before: line, after: lines[index + 1] ?? "" });
+      index += 2;
+      continue;
+    }
+
+    if (hunk) {
+      oldLine = hunk.oldLine;
+      newLine = hunk.newLine;
+      rows.push({ type: "meta", before: hunk.before, after: hunk.after });
+      index++;
+      continue;
+    }
 
     if (isMetadataLine(line)) {
-      rows.push({ type: "meta", text: line });
+      rows.push({ type: "meta", before: line, after: line });
       index++;
       continue;
     }
@@ -262,7 +306,11 @@ export function alignUnifiedDiff(code: string): DiffRow[] {
         index++;
       }
 
-      rows.push(...alignReplacementRun(removed, added));
+      const replacements = alignReplacementRun(removed, added);
+      addReplacementLineNumbers(replacements, oldLine, newLine);
+      rows.push(...replacements);
+      if (oldLine !== undefined) oldLine += removed.length;
+      if (newLine !== undefined) newLine += added.length;
       continue;
     }
 
@@ -270,7 +318,7 @@ export function alignUnifiedDiff(code: string): DiffRow[] {
       rows.push({
         type: "pair",
         before: { marker: " ", text: "" },
-        after: { marker: "+", text: line.slice(1) },
+        after: { marker: "+", text: line.slice(1), ...(newLine === undefined ? {} : { lineNumber: newLine++ }) },
       });
       index++;
       continue;
@@ -279,8 +327,8 @@ export function alignUnifiedDiff(code: string): DiffRow[] {
     const context = line.startsWith(" ") ? line.slice(1) : line;
     rows.push({
       type: "pair",
-      before: { marker: " ", text: context },
-      after: { marker: " ", text: context },
+      before: { marker: " ", text: context, ...(oldLine === undefined ? {} : { lineNumber: oldLine++ }) },
+      after: { marker: " ", text: context, ...(newLine === undefined ? {} : { lineNumber: newLine++ }) },
     });
     index++;
   }
@@ -303,7 +351,7 @@ function fillLabel(label: string, width: number): string {
 function highlightDiffRows(
   rows: readonly DiffRow[],
   inheritedLanguage: string | undefined,
-  highlightCode: CodeBlockRenderContext["highlightCode"],
+  highlightCode: DiffHighlightCode | undefined,
 ): ReadonlyMap<number, HighlightedDiffPair> {
   if (!inheritedLanguage || !highlightCode) return new Map();
 
@@ -398,6 +446,8 @@ function renderDiffCell(
   cell: DiffCell,
   highlightedText: string | undefined,
   width: number,
+  lineNumberWidth: number,
+  border: (value: string) => string,
   theme?: Theme,
 ): string[] {
   const color =
@@ -421,7 +471,8 @@ function renderDiffCell(
     );
   }
 
-  return wrapTextWithAnsi(source, Math.max(1, width - 2)).map((line, index) => {
+  const prefixWidth = lineNumberWidth > 0 ? lineNumberWidth + 5 : 2;
+  return wrapTextWithAnsi(source, Math.max(1, width - prefixWidth)).map((line, index) => {
     // wrapTextWithAnsi carries active backgrounds into continuation lines but
     // intentionally leaves each visual line open. Close partial diff backgrounds
     // before padding and borders so they cannot bleed outside the cell.
@@ -429,7 +480,17 @@ function renderDiffCell(
       theme && backgroundKey && cell.changedBytes !== undefined
         ? `${line}${BACKGROUND_RESET}`
         : line;
-    const value = padToWidth(`${index === 0 ? marker : " "} ${stableLine}`, width);
+    const lineNumber =
+      lineNumberWidth > 0
+        ? index === 0 && cell.lineNumber !== undefined
+          ? String(cell.lineNumber).padStart(lineNumberWidth, " ")
+          : " ".repeat(lineNumberWidth)
+        : "";
+    const prefix =
+      lineNumberWidth > 0
+        ? `${theme ? theme.fg("text", lineNumber) : lineNumber} ${index === 0 ? marker : " "} ${border("│")} `
+        : `${index === 0 ? marker : " "} `;
+    const value = padToWidth(`${prefix}${stableLine}`, width);
     return theme && backgroundKey && cell.changedBytes === undefined
       ? applyDiffBackground(theme, backgroundKey, value)
       : value;
@@ -443,7 +504,8 @@ export function renderSideBySideDiff({
   width,
   paddingX,
   theme,
-}: CodeBlockRenderContext): string[] | undefined {
+  maxRows,
+}: SideBySideDiffRenderContext): string[] | undefined {
   const contentWidth = width - paddingX * 2;
   if (contentWidth < MIN_SIDE_BY_SIDE_WIDTH) return undefined;
 
@@ -454,7 +516,25 @@ export function renderSideBySideDiff({
   const border = (value: string) => theme?.fg("mdCodeBlockBorder", value) ?? value;
   const lines: string[] = [];
   const rows = alignUnifiedDiff(code);
-  const highlightedRows = highlightDiffRows(rows, inheritedLanguage, highlightCode);
+  const visibleRows = maxRows === undefined ? rows : rows.slice(0, Math.max(0, maxRows));
+  const hiddenRowCount = rows.length - visibleRows.length;
+  const highlightedRows = highlightDiffRows(visibleRows, inheritedLanguage, highlightCode);
+  const beforeLineNumberWidth = Math.max(
+    0,
+    ...visibleRows.map((row) =>
+      row.type === "pair" && row.before.lineNumber !== undefined
+        ? String(row.before.lineNumber).length
+        : 0,
+    ),
+  );
+  const afterLineNumberWidth = Math.max(
+    0,
+    ...visibleRows.map((row) =>
+      row.type === "pair" && row.after.lineNumber !== undefined
+        ? String(row.after.lineNumber).length
+        : 0,
+    ),
+  );
 
   lines.push(
     margin +
@@ -462,15 +542,25 @@ export function renderSideBySideDiff({
       margin,
   );
 
-  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-    const row = rows[rowIndex]!;
+  for (let rowIndex = 0; rowIndex < visibleRows.length; rowIndex++) {
+    const row = visibleRows[rowIndex]!;
     if (row.type === "meta") {
-      const metadata = theme?.fg("muted", row.text) ?? row.text;
-      for (const metadataLine of wrapTextWithAnsi(metadata, contentWidth - 4)) {
+      const beforeMetadata = theme?.fg("muted", row.before) ?? row.before;
+      const afterMetadata = theme?.fg("muted", row.after) ?? row.after;
+      const beforeLines = wrapTextWithAnsi(beforeMetadata, beforeWidth).map((line) =>
+        padToWidth(line, beforeWidth),
+      );
+      const afterLines = wrapTextWithAnsi(afterMetadata, afterWidth).map((line) =>
+        padToWidth(line, afterWidth),
+      );
+      const visualRowCount = Math.max(beforeLines.length, afterLines.length);
+      for (let visualIndex = 0; visualIndex < visualRowCount; visualIndex++) {
         lines.push(
           margin +
             border("│ ") +
-            padToWidth(metadataLine, contentWidth - 4) +
+            (beforeLines[visualIndex] ?? " ".repeat(beforeWidth)) +
+            border(" │ ") +
+            (afterLines[visualIndex] ?? " ".repeat(afterWidth)) +
             border(" │") +
             margin,
         );
@@ -482,12 +572,16 @@ export function renderSideBySideDiff({
       row.before,
       highlightedRows.get(rowIndex)?.before,
       beforeWidth,
+      beforeLineNumberWidth,
+      border,
       theme,
     );
     const afterLines = renderDiffCell(
       row.after,
       highlightedRows.get(rowIndex)?.after,
       afterWidth,
+      afterLineNumberWidth,
+      border,
       theme,
     );
     const visualRowCount = Math.max(beforeLines.length, afterLines.length);
@@ -502,6 +596,13 @@ export function renderSideBySideDiff({
           margin,
       );
     }
+  }
+
+  if (hiddenRowCount > 0) {
+    const overflow = theme?.fg("muted", `… ${hiddenRowCount} more rows`) ?? `… ${hiddenRowCount} more rows`;
+    lines.push(
+      margin + border("│ ") + padToWidth(overflow, contentWidth - 4) + border(" │") + margin,
+    );
   }
 
   lines.push(

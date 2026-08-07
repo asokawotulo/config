@@ -15,6 +15,7 @@ export interface Pi083Root {
 
 export interface SidebarRenderer {
   render(width: number, height: number): string[];
+  invalidate(): void;
   /** Zero-based row lookup retained from the latest sidebar render. */
   hitTestAgent?(row: number): DynamicWorkflowAgentTarget | undefined;
 }
@@ -75,6 +76,11 @@ export class PatchedLayout {
   private lastSidebarVisible = false;
   private lastWidth = 0;
   private lastHeight = 0;
+  private historyCache:
+    | { width: number; lines: readonly string[] }
+    | undefined;
+  private idleScrollRequested = false;
+  private agentActive = false;
 
   constructor(
     private readonly tui: TUI,
@@ -83,9 +89,46 @@ export class PatchedLayout {
     private readonly sidebar: SidebarRenderer,
   ) {}
 
+  /** Allow exactly the next render to reuse complete history for an idle scroll. */
+  requestIdleScrollRender(idle: boolean): void {
+    this.idleScrollRequested =
+      idle && !this.agentActive && this.historyCache !== undefined;
+  }
+
+  setAgentActive(active: boolean): void {
+    if (active === this.agentActive) return;
+    this.agentActive = active;
+    this.invalidateHistory();
+  }
+
+  invalidateHistory(): void {
+    this.historyCache = undefined;
+    this.idleScrollRequested = false;
+  }
+
+  invalidateSidebar(): void {
+    this.sidebar.invalidate();
+  }
+
+  invalidateAll(): void {
+    this.invalidateHistory();
+    this.invalidateSidebar();
+  }
+
   render(width: number): string[] {
     const height = Math.max(1, this.tui.terminal.rows);
     const sidebarVisible = width >= SIDEBAR_MIN_TERMINAL_WIDTH;
+    const resized =
+      this.lastWidth !== 0 &&
+      (width !== this.lastWidth || height !== this.lastHeight);
+    let useIdleHistory = this.idleScrollRequested && !resized;
+    this.idleScrollRequested = false;
+
+    if (resized) {
+      this.invalidateAll();
+      useIdleHistory = false;
+    }
+
     this.lastWidth = width;
     this.lastHeight = height;
     const leftWidth = sidebarVisible
@@ -106,7 +149,18 @@ export class PatchedLayout {
     }
 
     const viewportHeight = Math.max(0, height - fixedLines.length);
-    const historyLines = renderComponents(this.root.history, leftWidth);
+    const cachedHistory = this.historyCache;
+    let reusedHistory = false;
+    let historyLines: readonly string[];
+    if (useIdleHistory && cachedHistory?.width === leftWidth) {
+      historyLines = cachedHistory.lines;
+      reusedHistory = true;
+    } else {
+      historyLines = renderComponents(this.root.history, leftWidth);
+    }
+    if (!reusedHistory && !this.agentActive) {
+      this.historyCache = { width: leftWidth, lines: historyLines };
+    }
     this.scroll.reconcile(historyLines.length, viewportHeight);
 
     const visibleHistory =

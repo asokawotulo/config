@@ -158,6 +158,10 @@ function fitRows(rows: readonly SidebarRow[], height: number): SidebarRow[] {
 
 export class SidebarComponent implements SidebarRenderer {
   private readonly hitTargets = new Map<number, DynamicWorkflowAgentTarget>();
+  private cachedMetadata: SidebarMetadata | undefined;
+  private cachedWidth: number | undefined;
+  private cachedHeight: number | undefined;
+  private cachedLines: string[] | undefined;
 
   constructor(
     private readonly getMetadata: () => SidebarMetadata,
@@ -168,8 +172,31 @@ export class SidebarComponent implements SidebarRenderer {
     return this.hitTargets.get(row);
   }
 
+  invalidate(): void {
+    this.cachedMetadata = undefined;
+    this.cachedWidth = undefined;
+    this.cachedHeight = undefined;
+    this.cachedLines = undefined;
+    this.hitTargets.clear();
+  }
+
   render(width: number, height: number): string[] {
-    const metadata = this.getMetadata();
+    if (
+      this.cachedLines &&
+      (this.cachedWidth !== width || this.cachedHeight !== height)
+    ) {
+      this.invalidate();
+    }
+    if (
+      this.cachedLines &&
+      this.cachedWidth === width &&
+      this.cachedHeight === height
+    ) {
+      return this.cachedLines;
+    }
+
+    const metadata = this.cachedMetadata ?? this.getMetadata();
+    this.cachedMetadata = metadata;
     const theme = this.getTheme();
     const contentWidth = Math.max(1, width - 3);
     const contextColor = contextUsageColor(metadata.contextPercent);
@@ -211,7 +238,7 @@ export class SidebarComponent implements SidebarRenderer {
     });
     while (visibleRows.length < height) visibleRows.push({ text: "" });
 
-    return visibleRows.map((row) => {
+    const lines = visibleRows.map((row) => {
       const styled = row.heading
         ? theme.bold(theme.fg("accent", row.text))
         : theme.fg(row.color ?? "muted", truncateToWidth(row.text, contentWidth, "…"));
@@ -224,5 +251,9 @@ export class SidebarComponent implements SidebarRenderer {
         theme.bg("customMessageBg", truncateToWidth(padded, width - 1, ""))
       );
     });
+    this.cachedWidth = width;
+    this.cachedHeight = height;
+    this.cachedLines = lines;
+    return lines;
   }
 }

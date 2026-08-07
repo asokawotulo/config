@@ -10,8 +10,11 @@ import {
 import { ChatScrollState } from "./scroll-state.ts";
 
 class Lines implements Component {
+  renderCalls = 0;
+
   constructor(public lines: string[]) {}
   render(): string[] {
+    this.renderCalls += 1;
     return this.lines;
   }
   invalidate(): void {}
@@ -27,11 +30,16 @@ function makeLayout(rows: number) {
     fixed: [empty, empty, empty, editor, empty],
     footer,
   };
-  const tui = { terminal: { rows } } as TUI;
+  const terminal = { rows };
+  const tui = { terminal } as TUI;
   const scroll = new ChatScrollState();
   const sidebar = {
+    invalidations: 0,
     render(width: number, height: number) {
       return Array.from({ length: height }, () => "#".repeat(width));
+    },
+    invalidate() {
+      this.invalidations += 1;
     },
     hitTestAgent(row: number) {
       return row === 2
@@ -44,6 +52,8 @@ function makeLayout(rows: number) {
     editor,
     footer,
     scroll,
+    sidebar,
+    terminal,
     layout: new PatchedLayout(tui, root, scroll, sidebar),
   };
 }
@@ -60,6 +70,84 @@ describe("PatchedLayout", () => {
 
     expect(after[0]).toStartWith(before[0]!.slice(0, 20));
     expect(after.at(-1)).toContain("typed text");
+  });
+
+  test("reuses complete history only for an explicitly requested idle scroll", () => {
+    const { editor, history, layout, scroll } = makeLayout(8);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    expect(history.renderCalls).toBe(1);
+
+    scroll.scrollBy(-3);
+    layout.requestIdleScrollRender(true);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    expect(history.renderCalls).toBe(1);
+    expect(editor.renderCalls).toBe(2);
+
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    expect(history.renderCalls).toBe(2);
+  });
+
+  test("restores bottom-following after an idle cached scroll", () => {
+    const { history, layout, scroll } = makeLayout(8);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+
+    scroll.scrollBy(-3);
+    layout.requestIdleScrollRender(true);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    expect(scroll.followingBottom).toBe(false);
+
+    scroll.scrollBy(3);
+    layout.requestIdleScrollRender(true);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    expect(scroll.followingBottom).toBe(true);
+
+    history.lines.push("followed line");
+    expect(layout.render(SIDEBAR_MIN_TERMINAL_WIDTH).join("\n"))
+      .toContain("followed line");
+    expect(scroll.followingBottom).toBe(true);
+  });
+
+  test("keeps active-agent and invalidated renders fresh", () => {
+    const { history, layout, scroll } = makeLayout(8);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+
+    layout.setAgentActive(true);
+    scroll.scrollBy(-3);
+    layout.requestIdleScrollRender(true);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    expect(history.renderCalls).toBe(3);
+
+    layout.setAgentActive(false);
+    scroll.scrollBy(100);
+    history.lines.push("final transcript line");
+    layout.requestIdleScrollRender(true);
+    expect(layout.render(SIDEBAR_MIN_TERMINAL_WIDTH).join("\n"))
+      .toContain("final transcript line");
+    expect(history.renderCalls).toBe(4);
+
+    layout.requestIdleScrollRender(true);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    expect(history.renderCalls).toBe(4);
+
+    history.lines.push("invalidated transcript line");
+    layout.invalidateHistory();
+    layout.requestIdleScrollRender(true);
+    expect(layout.render(SIDEBAR_MIN_TERMINAL_WIDTH).join("\n"))
+      .toContain("invalidated transcript line");
+    expect(history.renderCalls).toBe(5);
+  });
+
+  test("invalidates history and sidebar caches on resize", () => {
+    const { history, layout, sidebar, terminal } = makeLayout(8);
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+    layout.requestIdleScrollRender(true);
+
+    terminal.rows = 9;
+    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+
+    expect(history.renderCalls).toBe(2);
+    expect(sidebar.invalidations).toBe(1);
   });
 
   test("reserves columns for the sidebar in wide mode", () => {

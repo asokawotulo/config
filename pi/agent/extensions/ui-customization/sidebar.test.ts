@@ -248,6 +248,37 @@ describe("dynamic workflow sidebar state", () => {
 });
 
 describe("SidebarComponent", () => {
+  test("caches metadata and rendered rows until invalidated or resized", () => {
+    const metadata = sidebarMetadata();
+    let metadataCalls = 0;
+    let themeCalls = 0;
+    const sidebar = new SidebarComponent(
+      () => {
+        metadataCalls += 1;
+        return metadata;
+      },
+      () => {
+        themeCalls += 1;
+        return identityTheme();
+      },
+    );
+
+    const first = sidebar.render(30, 20);
+    expect(sidebar.render(30, 20)).toBe(first);
+    expect(metadataCalls).toBe(1);
+    expect(themeCalls).toBe(1);
+
+    metadata.sessionName = "Updated session";
+    sidebar.invalidate();
+    expect(sidebar.render(30, 20).join("\n")).toContain("Updated session");
+    expect(metadataCalls).toBe(2);
+    expect(themeCalls).toBe(2);
+
+    sidebar.render(30, 19);
+    expect(metadataCalls).toBe(3);
+    expect(themeCalls).toBe(3);
+  });
+
   test("uses context warning colors at the exact boundaries", () => {
     expect(contextUsageColor(null)).toBe("muted");
     expect(contextUsageColor(Number.NaN)).toBe("muted");
@@ -400,6 +431,8 @@ describe("SidebarComponent", () => {
       agentId: "worker",
     });
     expect(sidebar.hitTestAgent(row - 1)).toBeUndefined();
+    sidebar.invalidate();
+    expect(sidebar.hitTestAgent(row)).toBeUndefined();
     sidebar.render(30, row);
     expect(sidebar.hitTestAgent(row)).toBeUndefined();
   });

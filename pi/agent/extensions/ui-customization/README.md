@@ -37,6 +37,12 @@ The extension enables SGR mouse reporting while active. Hold Shift when selectin
 
 The sidebar appears at 100 terminal columns and wider. On narrower terminals it is hidden and Pi's original footer is restored.
 
+## Render caching
+
+Scroll input uses a conservative one-frame fast path only while Pi is idle. It reuses the latest complete history rendering while still rendering the editor and other fixed rows normally. Active-agent, ordinary, transcript-invalidated, and resized frames always render history fresh, so streaming and bottom-following behavior are unchanged.
+
+Sidebar metadata and styled rows are cached until a relevant event changes workflow, context/cost, session, model, thinking level, git metadata, dimensions, theme, or transcript state. Invalidation also clears workflow hit targets until the fresh sidebar has rendered.
+
 ## Dynamic workflows
 
 The sidebar hydrates from the shared Dynamic Workflow event contract at session start and updates as runs progress. It shows every active workflow in the current session; when none are active, it keeps only the newest settled workflow visible. Each subagent has a status row; bounded activity and per-agent cost rows appear only when terminal height remains after the Context, Model, and workflow status rows are budgeted. All sidebar output remains within 30 columns.
