@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import type { Editor } from "@earendil-works/pi-tui";
+import { visibleWidth, type Editor } from "@earendil-works/pi-tui";
 import { renderQuestionnaire } from "./render.ts";
 import {
   answerStateToResult,
@@ -262,19 +262,21 @@ describe("multiline answer rendering", () => {
   } as unknown as Editor;
   const stripAnsi = (text: string) => text.replace(/\u001b\[[0-9;]*m/g, "");
 
-  function renderedCustomAnswer(screen: number) {
+  function renderedCustomAnswer(
+    screen: number,
+    width = 80,
+    custom = "First line\nSecond line",
+  ) {
     return renderQuestionnaire(
       {
         questions: [question()],
-        answers: [
-          { selected: new Set<number>(), custom: "First line\nSecond line" },
-        ],
+        answers: [{ selected: new Set<number>(), custom }],
         cursors: [2],
         screen,
         editor,
       },
       theme,
-      80,
+      width,
     );
   }
 
@@ -292,6 +294,18 @@ describe("multiline answer rendering", () => {
     expect(stripAnsi(first ?? "").indexOf("First line")).toBe(
       stripAnsi(second ?? "").indexOf("Second line"),
     );
+  });
+
+  test.each([
+    ["active question", 0],
+    ["confirmation", 1],
+  ])("keeps prefixed answers visible at narrow widths on the %s screen", (_name, screen) => {
+    const lines = renderedCustomAnswer(screen, 8, "AB\nCD");
+    const plainLines = lines.map(stripAnsi);
+
+    expect(lines.every((line) => visibleWidth(line) <= 8)).toBe(true);
+    expect(plainLines.some((line) => line.includes("AB"))).toBe(true);
+    expect(plainLines.some((line) => line.includes("CD"))).toBe(true);
   });
 });
 

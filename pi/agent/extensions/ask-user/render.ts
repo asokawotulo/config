@@ -22,10 +22,11 @@ function appendPrefixed(
   width: number,
   prefix: string,
   text: string,
+  style: (line: string) => string = (line) => line,
 ) {
   const prefixWidth = visibleWidth(prefix);
   if (prefixWidth >= width) {
-    lines.push(...wrapTextWithAnsi(prefix + text, width));
+    lines.push(...wrapTextWithAnsi(`${prefix}${style(text)}`, width));
     return;
   }
 
@@ -34,31 +35,9 @@ function appendPrefixed(
   let firstLine = true;
   for (const paragraph of paragraphs) {
     const wrapped = wrapTextWithAnsi(
-      paragraph || " ",
+      style(paragraph || " "),
       Math.max(1, width - prefixWidth),
     );
-    for (const line of wrapped) {
-      lines.push(`${firstLine ? prefix : continuation}${line}`);
-      firstLine = false;
-    }
-  }
-}
-
-function appendStyledPrefixed(
-  lines: string[],
-  width: number,
-  prefix: string,
-  text: string,
-  style: (line: string) => string,
-) {
-  const prefixWidth = visibleWidth(prefix);
-  const continuation = " ".repeat(prefixWidth);
-  const paragraphs = text.split("\n");
-  let firstLine = true;
-
-  for (const paragraph of paragraphs) {
-    const styled = style(paragraph || " ");
-    const wrapped = wrapTextWithAnsi(styled, Math.max(1, width - prefixWidth));
     for (const line of wrapped) {
       lines.push(`${firstLine ? prefix : continuation}${line}`);
       firstLine = false;
@@ -194,7 +173,7 @@ export function renderQuestionnaire(
       for (const submitted of result.answers) {
         const icon =
           submitted.kind === "custom" ? ICONS.customAnswer : ICONS.optionAnswer;
-        appendStyledPrefixed(
+        appendPrefixed(
           lines,
           renderWidth,
           `    ${icon} `,
@@ -278,7 +257,7 @@ export function renderQuestionnaire(
     );
 
     if (isCustom && answer.custom) {
-      appendStyledPrefixed(
+      appendPrefixed(
         lines,
         renderWidth,
         "      ",

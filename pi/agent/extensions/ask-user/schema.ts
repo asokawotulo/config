@@ -2,8 +2,8 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type { Question } from "./types.ts";
 
-export const MIN_OPTIONS = 2;
-export const MAX_OPTIONS = 5;
+const MIN_OPTIONS = 2;
+const MAX_OPTIONS = 5;
 export const CUSTOM_OPTION_LABEL = "Write your own answer";
 
 const OptionSchema = Type.Object({
@@ -15,7 +15,7 @@ const OptionSchema = Type.Object({
   ),
 });
 
-export const QuestionSchema = Type.Object({
+const QuestionSchema = Type.Object({
   id: Type.String({ description: "Unique identifier for this question" }),
   label: Type.Optional(
     Type.String({ description: "Short label used for this question's tab" }),
