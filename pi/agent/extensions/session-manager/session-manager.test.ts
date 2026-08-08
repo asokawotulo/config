@@ -3,7 +3,9 @@ import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { truncateSessionTitle } from "./dialog.ts";
+import { isSameSessionPath } from "./paths.ts";
 import {
   deleteSessionFile,
   renameSessionFile,
@@ -32,10 +34,23 @@ describe("session manager display", () => {
     expect(truncateSessionTitle(title)).toBe(title);
   });
 
-  test("truncates longer titles to 100 characters with trailing ellipses", () => {
+  test("truncates longer titles to 100 columns with trailing ellipses", () => {
     const title = truncateSessionTitle("a".repeat(101));
-    expect(title).toHaveLength(100);
+    expect(visibleWidth(title)).toBe(100);
     expect(title).toBe(`${"a".repeat(97)}...`);
+  });
+
+  test("truncates emoji titles without splitting a Unicode character", () => {
+    const title = truncateSessionTitle("😀".repeat(51));
+
+    expect(visibleWidth(title)).toBeLessThanOrEqual(100);
+    expect(title).toBe(`${"😀".repeat(48)}...`);
+  });
+
+  test("normalizes paths before comparing session identity", () => {
+    expect(isSameSessionPath("/tmp/sessions/../one.jsonl", "/tmp/one.jsonl"))
+      .toBe(true);
+    expect(isSameSessionPath(undefined, "/tmp/one.jsonl")).toBe(false);
   });
 });
 
@@ -72,16 +87,17 @@ describe("session manager selection", () => {
     ).toBe("armed");
   });
 
-  test("navigation and timeout clear an armed deletion", () => {
+  test("navigation and timeout return deletion to the unarmed transition", () => {
     const state = new SessionManagerState();
 
-    state.requestDelete("one.jsonl", 1_000);
+    expect(state.requestDelete("one.jsonl", 1_000)).toBe("armed");
     state.move(1, 2);
-    expect(state.isDeleteArmed("one.jsonl", 1_100)).toBe(false);
+    expect(state.requestDelete("one.jsonl", 1_100)).toBe("armed");
 
-    state.requestDelete("two.jsonl", 2_000);
+    expect(state.requestDelete("two.jsonl", 2_000)).toBe("armed");
     expect(state.expireDelete(2_000 + DELETE_WINDOW_MS)).toBe(true);
-    expect(state.isDeleteArmed("two.jsonl", 4_000)).toBe(false);
+    expect(state.expireDelete(2_000 + DELETE_WINDOW_MS)).toBe(false);
+    expect(state.requestDelete("two.jsonl", 4_001)).toBe("armed");
   });
 });
 

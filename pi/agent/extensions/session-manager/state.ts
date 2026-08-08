@@ -42,13 +42,6 @@ export class SessionManagerState {
     return "armed";
   }
 
-  isDeleteArmed(path: string, now = Date.now()): boolean {
-    return (
-      this.armedDelete?.path === path &&
-      now - this.armedDelete.armedAt <= DELETE_WINDOW_MS
-    );
-  }
-
   expireDelete(now: number): boolean {
     if (!this.armedDelete) return false;
     if (now - this.armedDelete.armedAt < DELETE_WINDOW_MS) return false;

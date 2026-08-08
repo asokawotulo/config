@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -8,6 +7,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import {
   matchesKey,
+  stripTerminalSequences,
   truncateToWidth,
   visibleWidth,
   type TUI,
@@ -20,6 +20,8 @@ import {
   renderDialogFrame,
   showDialog,
 } from "../../shared/ui/index.ts";
+import { sanitizeTerminalText } from "../../lib/text.ts";
+import { isSameSessionPath } from "./paths.ts";
 import { DELETE_WINDOW_MS, SessionManagerState } from "./state.ts";
 import type { SessionManagerAction } from "./types.ts";
 
@@ -30,13 +32,11 @@ const MODIFIED_COLUMN_WIDTH = 16;
 const OVERLAY_WIDTH =
   2 + MAX_TITLE_LENGTH + 2 + MESSAGE_COLUMN_WIDTH + 2 + MODIFIED_COLUMN_WIDTH;
 
-function clean(value: string): string {
-  return value.replace(/[\x00-\x1f\x7f]/g, " ").trim();
-}
-
 export function truncateSessionTitle(value: string): string {
-  if (value.length <= MAX_TITLE_LENGTH) return value;
-  return `${value.slice(0, MAX_TITLE_LENGTH - 3)}...`;
+  if (visibleWidth(value) <= MAX_TITLE_LENGTH) return value;
+  return stripTerminalSequences(
+    truncateToWidth(value, MAX_TITLE_LENGTH, "..."),
+  );
 }
 
 function formatModified(date: Date): string {
@@ -65,10 +65,6 @@ function tableRow(
     width,
     "",
   );
-}
-
-function samePath(left: string | undefined, right: string): boolean {
-  return left !== undefined && resolve(left) === resolve(right);
 }
 
 class SessionManagerDialog extends DialogComponent {
@@ -147,7 +143,7 @@ class SessionManagerDialog extends DialogComponent {
     }
 
     if (data === "d" || matchesKey(data, "d")) {
-      if (samePath(this.currentSessionPath, session.path)) {
+      if (isSameSessionPath(this.currentSessionPath, session.path)) {
         this.clearTransientState();
         this.status = {
           type: "error",
@@ -207,9 +203,13 @@ class SessionManagerDialog extends DialogComponent {
         const session = this.sessions[index];
         if (!session) continue;
         const selected = index === this.state.selectedIndex;
-        const current = samePath(this.currentSessionPath, session.path);
+        const current = isSameSessionPath(
+          this.currentSessionPath,
+          session.path,
+        );
         const title = truncateSessionTitle(
-          clean(session.name ?? session.firstMessage) || session.id,
+          sanitizeTerminalText(session.name ?? session.firstMessage) ||
+            sanitizeTerminalText(session.id),
         );
         const displayTitle = current ? `[current] ${title}` : title;
         let row = tableRow(

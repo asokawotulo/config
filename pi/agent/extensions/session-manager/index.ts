@@ -1,14 +1,10 @@
-import { resolve } from "node:path";
 import {
   SessionManager,
   type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { showSessionManager } from "./dialog.ts";
+import { isSameSessionPath } from "./paths.ts";
 import { deleteSessionFile, renameSessionFile } from "./session-files.ts";
-
-function isSamePath(left: string | undefined, right: string): boolean {
-  return left !== undefined && resolve(left) === resolve(right);
-}
 
 export default function sessionManagerExtension(pi: ExtensionAPI) {
   pi.registerCommand("sessions", {
@@ -55,7 +51,7 @@ export default function sessionManagerExtension(pi: ExtensionAPI) {
         selectedIndex = action.index;
 
         if (action.kind === "resume") {
-          if (isSamePath(currentSessionPath, action.session.path)) return;
+          if (isSameSessionPath(currentSessionPath, action.session.path)) return;
           await ctx.switchSession(action.session.path);
           return;
         }
@@ -74,7 +70,7 @@ export default function sessionManagerExtension(pi: ExtensionAPI) {
           }
 
           try {
-            if (isSamePath(currentSessionPath, action.session.path)) {
+            if (isSameSessionPath(currentSessionPath, action.session.path)) {
               pi.setSessionName(nextName);
             } else {
               renameSessionFile(action.session.path, nextName);
@@ -89,7 +85,7 @@ export default function sessionManagerExtension(pi: ExtensionAPI) {
           continue;
         }
 
-        if (isSamePath(currentSessionPath, action.session.path)) {
+        if (isSameSessionPath(currentSessionPath, action.session.path)) {
           ctx.ui.notify("Cannot delete the currently active session", "error");
           continue;
         }
