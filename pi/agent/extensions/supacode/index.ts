@@ -27,6 +27,7 @@ import {
   SUPACODE_NOTIFICATION_EVENT,
   type SupacodeNotification,
 } from "../../lib/supacode-events.ts";
+import { utf8BytePrefix } from "../../lib/text.ts";
 
 const AGENT = "pi";
 
@@ -103,11 +104,11 @@ function emitPresence(event: string): void {
 // JSON-escape (minus the surrounding quotes) so the wire matches the shell
 // awk path, byte-cap to the same budget, then base64. App-side
 // decodeNotifyValue reverses both and tolerates a mid-escape cut.
-function notifyField(value: string, budget: number): string {
+export function notifyField(value: string, budget: number): string {
   const escaped = JSON.stringify(value).slice(1, -1);
-  const buf = Buffer.from(escaped, "utf8");
-  const capped = buf.length > budget ? buf.subarray(0, budget) : buf;
-  return capped.toString("base64");
+  return Buffer.from(utf8BytePrefix(escaped, budget), "utf8").toString(
+    "base64",
+  );
 }
 
 function emitNotification(content: SupacodeNotification): void {
