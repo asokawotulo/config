@@ -58,7 +58,6 @@ export default function toolDiffsExtension(pi: ExtensionAPI): void {
   const write = createWriteToolDefinition(process.cwd());
   pi.registerTool({
     ...write,
-    renderShell: "self",
     async execute(toolCallId, params, signal, onUpdate, executionContext) {
       let before: string | null | undefined;
       const delegated = createWriteToolDefinition(executionContext.cwd, {

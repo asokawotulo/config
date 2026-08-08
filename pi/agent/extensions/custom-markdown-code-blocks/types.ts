@@ -8,13 +8,21 @@ import type {
 
 export type OriginalRender = (this: Markdown, width: number) => string[];
 
+export type TransitionalMarkdownOptions = MarkdownOptions & {
+  transform?: (markdown: string, availableWidth: number) => string;
+  renderLatex?: boolean;
+};
+
 export type MarkdownInternals = {
   text: string;
   paddingX: number;
   paddingY: number;
   defaultTextStyle?: DefaultTextStyle;
   theme: MarkdownTheme;
-  options: MarkdownOptions;
+  options: TransitionalMarkdownOptions;
+  cachedText?: string;
+  cachedWidth?: number;
+  cachedLines?: string[];
 };
 
 export type ResolvedCodeBlockLanguage = {

@@ -5,7 +5,10 @@ import {
   resolveCodeBlockLanguage,
   splitMarkdownCodeBlockSections,
 } from "./markdown-renderer.ts";
-import type { CustomCodeBlockRenderer } from "./types.ts";
+import type {
+  CustomCodeBlockRenderer,
+  TransitionalMarkdownOptions,
+} from "./types.ts";
 
 const identity = (text: string) => text;
 const markdownTheme = {
@@ -28,6 +31,11 @@ const markdownTheme = {
 const noticeRenderer: CustomCodeBlockRenderer = {
   language: "notice",
   render: ({ code }) => [`custom: ${code}`],
+};
+
+const diffRenderer: CustomCodeBlockRenderer = {
+  language: "diff",
+  render: ({ code }) => [`diff custom: ${code}`],
 };
 
 describe("custom Markdown code block framework", () => {
@@ -62,6 +70,135 @@ describe("custom Markdown code block framework", () => {
         closed: false,
       },
     ]);
+  });
+
+  test("applies transform once to the complete source at content width", () => {
+    installCustomMarkdownCodeBlocks([noticeRenderer]);
+    const source = "Before\n\n```notice\nhello\n```\n\nAfter";
+    const calls: Array<{ markdown: string; width: number }> = [];
+    const options: TransitionalMarkdownOptions = {
+      transform: (markdown, availableWidth) => {
+        calls.push({ markdown, width: availableWidth });
+        return markdown;
+      },
+    };
+
+    const lines = new Markdown(source, 3, 0, markdownTheme, undefined, options).render(40);
+
+    expect(calls).toEqual([{ markdown: source, width: 34 }]);
+    expect(lines).toContain("custom: hello");
+  });
+
+  test("caches transformed output until invalidation or width changes", () => {
+    installCustomMarkdownCodeBlocks([noticeRenderer]);
+    let transformCount = 0;
+    const options: TransitionalMarkdownOptions = {
+      transform: (markdown) => {
+        transformCount++;
+        return markdown;
+      },
+    };
+    const component = new Markdown(
+      "```notice\nhello\n```",
+      0,
+      0,
+      markdownTheme,
+      undefined,
+      options,
+    );
+
+    const first = component.render(80);
+    expect(component.render(80)).toBe(first);
+    expect(transformCount).toBe(1);
+
+    const resized = component.render(100);
+    expect(resized).not.toBe(first);
+    expect(transformCount).toBe(2);
+    expect(component.render(100)).toBe(resized);
+
+    component.invalidate();
+    const invalidated = component.render(100);
+    expect(invalidated).not.toBe(resized);
+    expect(transformCount).toBe(3);
+  });
+
+  test("discovers diff fences created by transform", () => {
+    installCustomMarkdownCodeBlocks([diffRenderer]);
+    const options: TransitionalMarkdownOptions = {
+      transform: () => "```diff\n-old\n+new\n```",
+    };
+
+    const lines = new Markdown("diff placeholder", 0, 0, markdownTheme, undefined, options).render(
+      80,
+    );
+
+    expect(lines).toContain("diff custom: -old\n+new");
+  });
+
+  test("does not dispatch diff fences removed by transform", () => {
+    let renderCount = 0;
+    installCustomMarkdownCodeBlocks([
+      {
+        language: "diff",
+        render: () => {
+          renderCount++;
+          return ["unexpected custom diff"];
+        },
+      },
+    ]);
+    const options: TransitionalMarkdownOptions = {
+      transform: () => "The diff was removed.",
+    };
+
+    const lines = new Markdown(
+      "```diff\n-old\n+new\n```",
+      0,
+      0,
+      markdownTheme,
+      undefined,
+      options,
+    ).render(80);
+
+    expect(renderCount).toBe(0);
+    expect(lines.some((line) => line.includes("The diff was removed."))).toBe(true);
+  });
+
+  test("renders transformed ordinary content around custom blocks", () => {
+    installCustomMarkdownCodeBlocks([noticeRenderer]);
+    const options: TransitionalMarkdownOptions = {
+      transform: () => "Transformed intro\n\n```notice\nhello\n```\n\nTransformed outro",
+    };
+
+    const lines = new Markdown("original", 0, 0, markdownTheme, undefined, options).render(80);
+
+    expect(lines.some((line) => line.includes("Transformed intro"))).toBe(true);
+    expect(lines).toContain("custom: hello");
+    expect(lines.some((line) => line.includes("Transformed outro"))).toBe(true);
+  });
+
+  test("preserves delegated options without rerunning transform", () => {
+    installCustomMarkdownCodeBlocks([noticeRenderer]);
+    let transformCount = 0;
+    const options: TransitionalMarkdownOptions = {
+      preserveBackslashEscapes: true,
+      renderLatex: false,
+      transform: (markdown) => {
+        transformCount++;
+        return markdown;
+      },
+    };
+
+    const lines = new Markdown(
+      "escaped\\! and $x^2$",
+      0,
+      0,
+      markdownTheme,
+      undefined,
+      options,
+    ).render(80);
+
+    expect(transformCount).toBe(1);
+    expect(lines.some((line) => line.includes("escaped\\! and $x^2$"))).toBe(true);
   });
 
   test("dispatches registered blocks and preserves surrounding Markdown", () => {

@@ -46,4 +46,6 @@ Returning `undefined` from a renderer delegates that block to Pi's original Mark
 
 The renderer-neutral diff alignment, highlighting, theming, and responsive pane logic lives in `../../lib/side-by-side-diff/` and is shared with the `tool-diffs` extension. This extension only adapts that renderer to fenced Markdown.
 
-Pi 0.83 does not expose a Markdown code-block renderer hook. This extension patches the shared `Markdown.prototype.render` method and stores patch state under `asoka.pi.custom-markdown-code-blocks` so reloads are idempotent. It should be replaced by the official extension API if Pi adds a code-block renderer hook.
+This extension uses a transitional contract validated with Pi 0.83 and 0.84.1. Pi 0.83 has no Markdown extension hook; Pi 0.84.1 adds `registerMarkdownTransformer`, but that API can return only Markdown strings rather than custom TUI components. The extension therefore still patches the shared `Markdown.prototype.render` method and stores patch state under `asoka.pi.custom-markdown-code-blocks` so reloads are idempotent.
+
+On Pi 0.84.1, the adapter applies `MarkdownOptions.transform` exactly once to the complete source at the available content width before discovering custom fences. Ordinary Markdown and custom-renderer fallbacks delegate with `transform` removed so it cannot run again, while all other options, including `renderLatex`, are retained. Pi 0.83 follows the same path with no transform option. Replace the patch when Pi exposes an official code-block component renderer hook.

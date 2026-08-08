@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import {
+  createEditToolDefinition,
+  createWriteToolDefinition,
+  initTheme,
+  type Theme,
+} from "@earendil-works/pi-coding-agent";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import { ToolExecutionComponent } from "../../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/tool-execution.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,6 +48,36 @@ async function makeTemporaryDirectory(): Promise<string> {
   const path = await mkdtemp(join(tmpdir(), "pi-tool-diffs-"));
   temporaryDirectories.push(path);
   return path;
+}
+
+const replacedToolSlots = new Set(["execute", "renderCall", "renderResult"]);
+
+function expectBuiltInOverrideContract(override: any, builtIn: any): void {
+  expect(Object.keys(override).sort()).toEqual(Object.keys(builtIn).sort());
+  expect(override.parameters).toBe(builtIn.parameters);
+  expect(override.prepareArguments).toBe(builtIn.prepareArguments);
+  expect(override.promptSnippet).toBe(builtIn.promptSnippet);
+  expect(override.promptGuidelines).toEqual(builtIn.promptGuidelines);
+  expect(override.renderShell).toBe(builtIn.renderShell);
+
+  for (const key of Object.keys(builtIn)) {
+    if (!replacedToolSlots.has(key)) expect(override[key]).toEqual(builtIn[key]);
+  }
+  for (const slot of replacedToolSlots) {
+    expect(typeof override[slot]).toBe("function");
+    expect(override[slot].toString()).not.toBe(builtIn[slot].toString());
+  }
+}
+
+function renderAtBoundedWidths(component: ToolExecutionComponent): Map<number, string[]> {
+  const rendered = new Map<number, string[]>();
+  for (const width of [100, 220]) {
+    const lines = component.render(width);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+    rendered.set(width, lines.map(stripAnsi));
+  }
+  return rendered;
 }
 
 describe("tool diff rendering", () => {
@@ -121,6 +157,14 @@ describe("tool diff overrides", () => {
     expect(tools.map((tool) => tool.name)).toEqual(["edit", "write"]);
   });
 
+  test("retains the Pi 0.84.1 built-in contracts outside execution and rendering", async () => {
+    const cwd = await makeTemporaryDirectory();
+    const tools = await loadTools(cwd);
+
+    expectBuiltInOverrideContract(tools.get("edit"), createEditToolDefinition(process.cwd()));
+    expectBuiltInOverrideContract(tools.get("write"), createWriteToolDefinition(process.cwd()));
+  });
+
   test("delegates edit execution and renders its persisted patch side by side", async () => {
     const cwd = await makeTemporaryDirectory();
     const path = join(cwd, "example");
@@ -176,7 +220,40 @@ describe("tool diff overrides", () => {
       isError: false,
     });
 
-    const lines = component.render(100).map(stripAnsi);
+    const lines = renderAtBoundedWidths(component).get(100)!;
+    expect(lines.some((line) => line.includes("Before") && line.includes("After"))).toBe(true);
+    expect(lines.some((line) => line.includes("1 - │ const value = 'old';"))).toBe(true);
+    expect(lines.some((line) => line.includes("1 + │ const value = 'new';"))).toBe(true);
+  });
+
+  test("Pi's historical replay component uses persisted write diff details", async () => {
+    initTheme("dark", false);
+    const cwd = await makeTemporaryDirectory();
+    const write = (await loadTools(cwd)).get("write");
+    const args = { path: "past.ts", content: "const value = 'new';\n" };
+    const component = new ToolExecutionComponent(
+      "write",
+      "past-write",
+      args,
+      {},
+      write,
+      { requestRender() {} } as never,
+      cwd,
+    );
+    component.setArgsComplete();
+    component.updateResult({
+      content: [{ type: "text", text: "Successfully wrote 21 bytes to past.ts" }],
+      details: {
+        kind: "diff",
+        path: "past.ts",
+        patch:
+          "--- past.ts\n+++ past.ts\n@@ -1,1 +1,1 @@\n-const value = 'old';\n+const value = 'new';\n",
+        created: false,
+      } satisfies WriteDiffDetails,
+      isError: false,
+    });
+
+    const lines = renderAtBoundedWidths(component).get(100)!;
     expect(lines.some((line) => line.includes("Before") && line.includes("After"))).toBe(true);
     expect(lines.some((line) => line.includes("1 - │ const value = 'old';"))).toBe(true);
     expect(lines.some((line) => line.includes("1 + │ const value = 'new';"))).toBe(true);

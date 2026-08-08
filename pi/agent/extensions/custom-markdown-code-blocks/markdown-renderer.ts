@@ -93,22 +93,41 @@ export function splitMarkdownCodeBlockSections(
   return sections;
 }
 
-function renderOriginalSection(
+function withoutTransform(
+  options: MarkdownInternals["options"],
+): MarkdownInternals["options"] {
+  const { transform: _transform, ...delegatedOptions } = options;
+  return delegatedOptions;
+}
+
+function renderOriginalMarkdown(
   state: PatchState,
   source: MarkdownInternals,
   text: string,
   width: number,
+  paddingY: number,
+  options: MarkdownInternals["options"],
 ): string[] {
   if (!text.trim()) return [];
   const component = new Markdown(
     text,
     source.paddingX,
-    0,
+    paddingY,
     source.theme,
     source.defaultTextStyle,
-    source.options,
+    options,
   );
   return state.originalRender.call(component, width);
+}
+
+function renderOriginalSection(
+  state: PatchState,
+  source: MarkdownInternals,
+  text: string,
+  width: number,
+  options: MarkdownInternals["options"],
+): string[] {
+  return renderOriginalMarkdown(state, source, text, width, 0, options);
 }
 
 function renderOriginalCodeBlock(
@@ -117,8 +136,15 @@ function renderOriginalCodeBlock(
   code: string,
   language: string,
   width: number,
+  options: MarkdownInternals["options"],
 ): string[] {
-  return renderOriginalSection(state, source, `\`\`\`${language}\n${code}\n\`\`\``, width);
+  return renderOriginalSection(
+    state,
+    source,
+    `\`\`\`${language}\n${code}\n\`\`\``,
+    width,
+    options,
+  );
 }
 
 function patchedMarkdownRender(this: Markdown, width: number): string[] {
@@ -128,12 +154,41 @@ function patchedMarkdownRender(this: Markdown, width: number): string[] {
   ];
   if (!currentState) throw new Error("Custom Markdown code block patch state is unavailable");
 
+  if (
+    source.cachedLines &&
+    source.cachedText === source.text &&
+    source.cachedWidth === width
+  ) {
+    return source.cachedLines;
+  }
+
+  const cache = (lines: string[]): string[] => {
+    source.cachedText = source.text;
+    source.cachedWidth = width;
+    source.cachedLines = lines;
+    return lines;
+  };
+
+  const contentWidth = Math.max(1, width - source.paddingX * 2);
+  const transform = source.options.transform;
+  const transformedText = transform?.(source.text, contentWidth) ?? source.text;
+  const delegatedOptions = withoutTransform(source.options);
   const sections = splitMarkdownCodeBlockSections(
-    source.text,
+    transformedText,
     new Set(currentState.renderers.keys()),
   );
   if (!sections.some((section) => section.type === "codeBlock")) {
-    return currentState.originalRender.call(this, width);
+    if (!transform) return currentState.originalRender.call(this, width);
+    return cache(
+      renderOriginalMarkdown(
+        currentState,
+        source,
+        transformedText,
+        width,
+        source.paddingY,
+        delegatedOptions,
+      ),
+    );
   }
 
   const rendered: string[] = [];
@@ -142,7 +197,15 @@ function patchedMarkdownRender(this: Markdown, width: number): string[] {
 
   for (const section of sections) {
     if (section.type === "markdown") {
-      rendered.push(...renderOriginalSection(currentState, source, section.text, width));
+      rendered.push(
+        ...renderOriginalSection(
+          currentState,
+          source,
+          section.text,
+          width,
+          delegatedOptions,
+        ),
+      );
       continue;
     }
 
@@ -164,12 +227,13 @@ function patchedMarkdownRender(this: Markdown, width: number): string[] {
           section.code,
           section.language,
           width,
+          delegatedOptions,
         )),
     );
   }
 
   for (let index = 0; index < source.paddingY; index++) rendered.push(emptyLine);
-  return rendered.length > 0 ? rendered : [""];
+  return cache(rendered.length > 0 ? rendered : [""]);
 }
 
 export function installCustomMarkdownCodeBlocks(
