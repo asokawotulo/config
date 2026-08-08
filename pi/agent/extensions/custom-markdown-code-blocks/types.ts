@@ -44,6 +44,7 @@ export type CodeBlockRenderContext = {
   code: string;
   language: string;
   inheritedLanguage?: string;
+  closed: boolean;
   highlightCode?: MarkdownTheme["highlightCode"];
   width: number;
   paddingX: number;

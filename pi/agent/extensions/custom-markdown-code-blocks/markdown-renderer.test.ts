@@ -72,6 +72,67 @@ describe("custom Markdown code block framework", () => {
     ]);
   });
 
+  test("skips custom-looking fences inside ordinary backtick and tilde fences", () => {
+    const sources = [
+      "````text\n```notice\nliteral backtick content\n```\n````",
+      "~~~~text\n~~~notice\nliteral tilde content\n~~~\n~~~~",
+    ];
+
+    for (const source of sources) {
+      expect(splitMarkdownCodeBlockSections(source, new Set(["notice"]))).toEqual([
+        { type: "markdown", text: source },
+      ]);
+    }
+  });
+
+  test("does not render custom-looking fences inside ordinary backtick and tilde fences", () => {
+    const renderedCodes: string[] = [];
+    installCustomMarkdownCodeBlocks([
+      {
+        language: "notice",
+        render: ({ code }) => {
+          renderedCodes.push(code);
+          return [`unexpected custom: ${code}`];
+        },
+      },
+    ]);
+    const cases = [
+      {
+        source: "````text\n```notice\nliteral backtick content\n```\n````",
+        literal: "literal backtick content",
+      },
+      {
+        source: "~~~~text\n~~~notice\nliteral tilde content\n~~~\n~~~~",
+        literal: "literal tilde content",
+      },
+    ];
+
+    for (const { source, literal } of cases) {
+      const lines = new Markdown(source, 0, 0, markdownTheme).render(80);
+      expect(lines.some((line) => line.includes(literal))).toBe(true);
+      expect(lines.some((line) => line.includes("unexpected custom"))).toBe(false);
+    }
+    expect(renderedCodes).toEqual([]);
+  });
+
+  test("passes closed and streaming fence state to custom renderers", () => {
+    const closedStates: boolean[] = [];
+    installCustomMarkdownCodeBlocks([
+      {
+        language: "notice",
+        render: ({ closed }) => {
+          closedStates.push(closed);
+          return [String(closed)];
+        },
+      },
+    ]);
+
+    new Markdown("```notice\ncomplete\n```", 0, 0, markdownTheme).render(80);
+    new Markdown("```notice\nstreaming", 0, 0, markdownTheme).render(80);
+
+    expect(closedStates).toEqual([true, false]);
+  });
+
   test("applies transform once to the complete source at content width", () => {
     installCustomMarkdownCodeBlocks([noticeRenderer]);
     const source = "Before\n\n```notice\nhello\n```\n\nAfter";

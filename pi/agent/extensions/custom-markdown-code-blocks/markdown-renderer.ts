@@ -49,17 +49,14 @@ export function splitMarkdownCodeBlockSections(
   let markdownStart = 0;
 
   for (let index = 0; index < lines.length; index++) {
-    const opening = /^( {0,3})(`{3,}|~{3,})\s*([^\s`]*)\s*$/.exec(lines[index] ?? "");
-    const resolvedLanguage = resolveCodeBlockLanguage(opening?.[3] ?? "", registeredLanguages);
-    if (!opening || !resolvedLanguage) continue;
-
-    const { language, inheritedLanguage } = resolvedLanguage;
-
-    if (index > markdownStart) {
-      sections.push({ type: "markdown", text: lines.slice(markdownStart, index).join("\n") });
-    }
+    const opening = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(lines[index] ?? "");
+    if (!opening) continue;
 
     const marker = opening[2] ?? "```";
+    const rawInfoString = opening[3] ?? "";
+    // Backticks are forbidden in the info string of a backtick fence.
+    if (marker[0] === "`" && rawInfoString.includes("`")) continue;
+
     const closingPattern = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}\\s*$`);
     let closingIndex = lines.length;
     for (let candidate = index + 1; candidate < lines.length; candidate++) {
@@ -67,6 +64,24 @@ export function splitMarkdownCodeBlockSections(
         closingIndex = candidate;
         break;
       }
+    }
+
+    const resolvedLanguage = resolveCodeBlockLanguage(
+      rawInfoString.trim(),
+      registeredLanguages,
+    );
+    if (!resolvedLanguage) {
+      // Everything through the matching close belongs literally to this
+      // ordinary fence, so custom-looking fences inside it are not top-level.
+      if (closingIndex >= lines.length) break;
+      index = closingIndex;
+      continue;
+    }
+
+    const { language, inheritedLanguage } = resolvedLanguage;
+
+    if (index > markdownStart) {
+      sections.push({ type: "markdown", text: lines.slice(markdownStart, index).join("\n") });
     }
 
     sections.push({
@@ -214,6 +229,7 @@ function patchedMarkdownRender(this: Markdown, width: number): string[] {
       code: section.code,
       language: section.language,
       inheritedLanguage: section.inheritedLanguage,
+      closed: section.closed,
       highlightCode: source.theme.highlightCode,
       width,
       paddingX: source.paddingX,
