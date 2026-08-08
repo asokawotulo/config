@@ -25,6 +25,7 @@ const role: RoleDefinition = {
   name: "reader",
   description: "Reads safely",
   model: "test/model",
+  thinking: "high",
   tools: ["read", "grep"],
   skills: ["diff"],
   prompt: "Read",
@@ -89,6 +90,7 @@ describe("workflow confirmation dialog", () => {
     expect(rendered).toContain("first");
     expect(rendered).toContain("second");
     expect(rendered).toMatch(/│ Role\s+│ reader — Reads safely/);
+    expect(rendered).toMatch(/│ Model\s+│ test\/model • thinking: high/);
     expect(rendered).toMatch(/│ Dependencies\s+│ first/);
     expect(rendered).toMatch(/│ Tools\s+│ read/);
     expect(rendered).toMatch(/│ Context files\s+│ src\/first\.ts/);

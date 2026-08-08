@@ -44,7 +44,7 @@ Each agent may declare `contextFiles`, an optional list of up to **16** worktree
 
 ## Confirmation
 
-Valid proposals open directly on a read-only confirmation page. On wide terminals subagent details use roughly three quarters of the page on the left and a top-down Mermaid workflow graph uses the remaining quarter on the right; narrow terminals stack them. The page shows the workflow name and description plus a bordered field/value table for every agent's id, role, model, full prompt, dependencies, effective tools and skills, and approved context paths. It also shows context bounds and the CC Safety Net command-inspection contract.
+Valid proposals open directly on a read-only confirmation page. On wide terminals subagent details use roughly three quarters of the page on the left and a top-down Mermaid workflow graph uses the remaining quarter on the right; narrow terminals stack them. The page shows the workflow name and description plus a bordered field/value table for every agent's id, role, model and configured thinking level, full prompt, dependencies, effective tools and skills, and approved context paths. It also shows context bounds and the CC Safety Net command-inspection contract.
 
 Pi's terminal Mermaid renderer draws the DAG with Unicode box art. If full agent labels do not fit the graph column, it renders a numbered top-down Mermaid graph with an agent legend; only widths too narrow for that use the wrapped dependency-edge fallback. Workflow information is never clipped.
 

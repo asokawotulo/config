@@ -227,13 +227,19 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
     for (const agent of this.definition.agents) {
       const role = this.roles.get(agent.role);
       const resolvedAgent = resolved.get(agent.id);
+      const modelRole = resolvedAgent?.resolvedRole ?? role;
       const tools = resolvedAgent?.effectiveTools ?? (agent.tools === undefined ? role?.tools : agent.tools);
       const skills = resolvedAgent?.effectiveSkills ?? (agent.skills === undefined ? role?.skills : agent.skills);
       lines.push(
         ...renderAgentTable(this.theme, width, [
           { label: "ID", value: agent.id, accent: true },
           { label: "Role", value: `${agent.role}${role?.description ? ` — ${role.description}` : ""}` },
-          { label: "Model", value: resolvedAgent?.resolvedRole.model ?? role?.model ?? "unavailable" },
+          {
+            label: "Model",
+            value: modelRole
+              ? `${modelRole.model} • thinking: ${modelRole.thinking ?? "default"}`
+              : "unavailable",
+          },
           { label: "Dependencies", value: agent.dependsOn.join(", ") || "none" },
           { label: "Tools", value: tools?.join(", ") || "none" },
           { label: "Skills", value: skills?.join(", ") || "none" },
