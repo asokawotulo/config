@@ -15,7 +15,9 @@ import type { SidebarMetadata } from "./metadata.ts";
 export const SIDEBAR_WIDTH = 50;
 
 const CHROME_ROWS = 2;
+const OPTIONAL_PRIORITIES = [0, 10, 20, 25, 30, 50, 55, 60] as const;
 
+type OptionalPriority = (typeof OPTIONAL_PRIORITIES)[number];
 type SidebarColor =
   | "muted"
   | "dim"
@@ -28,7 +30,7 @@ interface SidebarRow {
   text: string;
   color?: SidebarColor;
   heading?: boolean;
-  optionalPriority?: number;
+  optionalPriority?: OptionalPriority;
 }
 
 export function contextUsageColor(
@@ -216,15 +218,28 @@ function compactRows(
 }
 
 function fitRows(rows: readonly SidebarRow[], budget: number): SidebarRow[] {
-  let fitted = [...rows];
-  const optional = fitted
-    .filter((row) => row.optionalPriority !== undefined)
-    .sort((left, right) => left.optionalPriority! - right.optionalPriority!);
-  for (const row of optional) {
-    if (fitted.length <= budget) break;
-    fitted = fitted.filter((candidate) => candidate !== row);
+  let remaining = Math.max(0, rows.length - Math.max(0, budget));
+  if (remaining === 0) return [...rows];
+
+  const buckets = new Map<OptionalPriority, SidebarRow[]>(
+    OPTIONAL_PRIORITIES.map((priority) => [priority, []]),
+  );
+  for (const row of rows) {
+    if (row.optionalPriority !== undefined) {
+      buckets.get(row.optionalPriority)!.push(row);
+    }
   }
-  return fitted;
+
+  const removed = new Set<SidebarRow>();
+  for (const priority of OPTIONAL_PRIORITIES) {
+    for (const row of buckets.get(priority)!) {
+      if (remaining === 0) break;
+      removed.add(row);
+      remaining -= 1;
+    }
+    if (remaining === 0) break;
+  }
+  return rows.filter((row) => !removed.has(row));
 }
 
 function renderSidebarLine(

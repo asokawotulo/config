@@ -8,14 +8,12 @@ import {
   DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
   type DynamicWorkflowStateRequestEvent,
 } from "../../lib/dynamic-workflow-events.ts";
+import { resolveGitMetadata, type GitMetadata } from "./git-metadata.ts";
 import { Pi0840SidebarLayoutAdapter } from "./layout.ts";
-import {
-  buildSidebarMetadata,
-  DynamicWorkflowSidebarState,
-  resolveGitMetadata,
-  type GitMetadata,
-} from "./metadata.ts";
+import { buildSidebarMetadata } from "./metadata.ts";
 import { SidebarComponent } from "./sidebar.ts";
+import type { PendingGitRefresh } from "./types.ts";
+import { DynamicWorkflowSidebarState } from "./workflow-state.ts";
 
 export default function uiCustomization(pi: ExtensionAPI) {
   let currentContext: ExtensionContext | undefined;
@@ -27,7 +25,7 @@ export default function uiCustomization(pi: ExtensionAPI) {
   let git: GitMetadata = { branchWorktree: "" };
   let gitRefreshGeneration = 0;
   let gitRefreshRunning = false;
-  let gitRefreshPending = false;
+  let pendingGitRefresh: PendingGitRefresh | undefined;
   const workflows = new DynamicWorkflowSidebarState();
 
   const buildMetadata = () => {
@@ -106,16 +104,24 @@ export default function uiCustomization(pi: ExtensionAPI) {
 
   const refreshGit = async (ctx: ExtensionContext) => {
     currentContext = ctx;
-    gitRefreshPending = true;
+    pendingGitRefresh = {
+      generation: gitRefreshGeneration,
+      cwd: ctx.cwd,
+    };
     if (gitRefreshRunning) return;
 
     gitRefreshRunning = true;
     try {
-      while (gitRefreshPending) {
-        gitRefreshPending = false;
-        const generation = gitRefreshGeneration;
-        const nextGit = await resolveGitMetadata(pi, ctx.cwd);
-        if (generation !== gitRefreshGeneration) return;
+      while (pendingGitRefresh) {
+        const request = pendingGitRefresh;
+        pendingGitRefresh = undefined;
+        const nextGit = await resolveGitMetadata(pi, request.cwd);
+        if (
+          request.generation !== gitRefreshGeneration ||
+          pendingGitRefresh
+        ) {
+          continue;
+        }
         git = nextGit;
         refreshSidebar();
       }
@@ -197,7 +203,7 @@ export default function uiCustomization(pi: ExtensionAPI) {
 
   const resetSessionState = () => {
     gitRefreshGeneration += 1;
-    gitRefreshPending = false;
+    pendingGitRefresh = undefined;
     layoutAdapter?.uninstall();
     layoutAdapter = undefined;
     sidebar = undefined;

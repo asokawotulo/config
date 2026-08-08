@@ -176,8 +176,6 @@ export class Pi0840SidebarLayoutAdapter {
   private transcriptColumn: HStack | undefined;
   private dockWithoutFooter: VStack | undefined;
   private sidebarVisible = false;
-  private lastMeasuredRows: number | undefined;
-  private lastMeasuredColumns: number | undefined;
 
   constructor(
     private readonly tui: TUI,
@@ -254,35 +252,14 @@ export class Pi0840SidebarLayoutAdapter {
     return result;
   }
 
-  isSidebarVisible(): boolean {
-    return this.sidebarVisible;
-  }
-
-  invalidateSidebar(): InstallResult {
-    this.sidebar.invalidate();
-    const result = this.reconcile();
-    this.tui.requestRender();
-    return result;
-  }
-
   getTranscriptHeight(): number {
     const rows = Math.max(1, this.tui.terminal.rows);
-    const columns = Math.max(1, this.tui.terminal.columns);
-    const layout = this.layout;
     const dock = this.dockWithoutFooter;
-    if (!layout || !dock) return rows;
+    if (!this.layout || !dock) return rows;
 
-    const unchangedDimensions =
-      rows === this.lastMeasuredRows && columns === this.lastMeasuredColumns;
-    this.lastMeasuredRows = rows;
-    this.lastMeasuredColumns = columns;
-
+    const columns = Math.max(1, this.tui.terminal.columns);
     const dockNaturalHeight = Math.max(1, dock.render(columns).length);
-    const derivedHeight = Math.max(1, rows - dockNaturalHeight);
-    return unchangedDimensions &&
-      layout.transcript.viewportHeight === derivedHeight
-      ? layout.transcript.viewportHeight
-      : derivedHeight;
+    return Math.max(1, rows - dockNaturalHeight);
   }
 
   uninstall(): boolean {
@@ -312,8 +289,6 @@ export class Pi0840SidebarLayoutAdapter {
     layout.root.children[0] = this.transcriptColumn!;
     layout.root.entries[1]!.component = this.dockWithoutFooter!;
     layout.root.children[1] = this.dockWithoutFooter!;
-    this.lastMeasuredRows = undefined;
-    this.lastMeasuredColumns = undefined;
     this.tui.requestRender();
   }
 }

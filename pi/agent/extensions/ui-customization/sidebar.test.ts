@@ -6,21 +6,22 @@ import type {
   Theme,
 } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import type {
-  DynamicWorkflowAgentSnapshot,
-  DynamicWorkflowRunSnapshot,
-  DynamicWorkflowStatus,
+import {
+  MAX_DYNAMIC_WORKFLOW_AGENTS,
+  MAX_DYNAMIC_WORKFLOW_RUNS,
+  type DynamicWorkflowAgentSnapshot,
+  type DynamicWorkflowRunSnapshot,
+  type DynamicWorkflowStatus,
 } from "../../lib/dynamic-workflow-events.ts";
+import { resolveGitMetadata } from "./git-metadata.ts";
 import {
   buildSidebarMetadata,
-  calculateSessionCost,
-  calculateSessionCosts,
-  DynamicWorkflowSidebarState,
   formatDirectory,
   formatTokenCount,
-  resolveGitMetadata,
   type SidebarMetadata,
 } from "./metadata.ts";
+import { calculateSessionCosts } from "./session-cost.ts";
+import { DynamicWorkflowSidebarState } from "./workflow-state.ts";
 import {
   contextUsageColor,
   SIDEBAR_WIDTH,
@@ -111,7 +112,6 @@ describe("status widget metadata", () => {
       entry({ type: "branch_summary", usage: usage(4) }),
     ];
 
-    expect(calculateSessionCost(entries)).toBe(10);
     expect(calculateSessionCosts(entries)).toEqual({
       total: 10,
       main: 10,
@@ -252,10 +252,6 @@ describe("dynamic workflow widget state", () => {
         sessionId: "session-a",
         runs: [
           workflowRun("older", "failed", 10, { finishedAt: 20 }),
-          workflowRun("foreign", "completed", 30, {
-            sessionId: "session-b",
-            finishedAt: 40,
-          }),
           workflowRun("newest", "completed", 15, { finishedAt: 25 }),
           workflowRun("running", "running", 12),
         ],
@@ -266,6 +262,40 @@ describe("dynamic workflow widget state", () => {
       "running",
       "older",
     ]);
+  });
+
+  test("rejects malformed shared events without replacing valid state", () => {
+    const state = new DynamicWorkflowSidebarState();
+    state.beginSession("session-a");
+    const valid = workflowRun("valid", "running", 1);
+    expect(
+      state.applyRun({ sessionId: "session-a", phase: "started", run: valid }),
+    ).toBe(true);
+
+    expect(
+      state.applyRun({
+        sessionId: "session-a",
+        phase: "progress",
+        run: { ...workflowRun("unknown-field", "running", 2), extra: true },
+      }),
+    ).toBe(false);
+    expect(
+      state.applyState({
+        sessionId: "session-a",
+        runs: [
+          workflowRun("foreign", "completed", 3, {
+            sessionId: "session-b",
+          }),
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      state.applyState({
+        sessionId: "session-a",
+        runs: [{ ...workflowRun("invalid-number", "failed", 4), startedAt: NaN }],
+      }),
+    ).toBe(false);
+    expect(state.getVisibleRuns()).toEqual([valid]);
   });
 });
 
@@ -357,6 +387,36 @@ describe("SidebarComponent", () => {
       .join("\n");
     expect(constrained).toContain("run-0");
     expect(constrained).toContain("more workflows");
+  });
+
+  test("fits and renders the maximum workflow event contract linearly", () => {
+    const agents: DynamicWorkflowAgentSnapshot[] = Array.from(
+      { length: MAX_DYNAMIC_WORKFLOW_AGENTS },
+      (_, index) => ({
+        id: `agent-${index}`,
+        role: "worker",
+        status: "running",
+        activity: `activity-${index}`,
+        cost: index / 100,
+      }),
+    );
+    const runs = Array.from({ length: MAX_DYNAMIC_WORKFLOW_RUNS }, (_, index) =>
+      workflowRun(`run-${index}`, "running", index, { agents }),
+    );
+    const height = 80;
+    const lines = new SidebarComponent(
+      () => widgetMetadata(runs),
+      identityTheme,
+      () => height,
+    ).render(SIDEBAR_WIDTH);
+    const text = lines.join("\n");
+
+    expect(lines).toHaveLength(height);
+    expect(lines.every((line) => visibleWidth(line) === SIDEBAR_WIDTH)).toBe(
+      true,
+    );
+    expect(text).toContain("run-0");
+    expect(text).toContain(`run-${MAX_DYNAMIC_WORKFLOW_RUNS - 1}`);
   });
 
   test("caches by width and transcript height until invalidated", () => {

@@ -88,6 +88,106 @@ function stack(component: Component): RuntimeStack {
   return component as unknown as RuntimeStack;
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve(value: T): void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+async function waitFor(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20 && !condition(); attempt += 1) {
+    await Promise.resolve();
+  }
+  expect(condition()).toBe(true);
+}
+
+function gitResult(cwd: string, branch: string) {
+  return {
+    code: 0,
+    stdout: `${cwd}\n${cwd}/.git\n${cwd}/.git\n${branch}\n`,
+    stderr: "",
+    killed: false,
+  };
+}
+
+function makeGitRefreshHarness() {
+  type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
+  const handlers = new Map<string, Handler[]>();
+  const requests: Array<{
+    cwd: string;
+    result: Deferred<ReturnType<typeof gitResult>>;
+  }> = [];
+  const fixture = makeFullscreenTui();
+  const theme = identityTheme();
+  let footer: Component | undefined;
+  const pi = {
+    on(event: string, handler: Handler) {
+      const registered = handlers.get(event) ?? [];
+      registered.push(handler);
+      handlers.set(event, registered);
+    },
+    registerShortcut() {},
+    registerCommand() {},
+    events: { on() {}, emit() {} },
+    exec(_command: string, args: string[]) {
+      const result = deferred<ReturnType<typeof gitResult>>();
+      requests.push({ cwd: args[1]!, result });
+      return result.promise;
+    },
+    getSessionName: () => "git refresh test",
+    getThinkingLevel: () => "off",
+  } as unknown as ExtensionAPI;
+  uiCustomization(pi);
+
+  const makeContext = (sessionId: string, cwd: string) =>
+    ({
+      mode: "tui",
+      cwd,
+      ui: {
+        theme,
+        setFooter(
+          factory:
+            | ((tui: TUI, theme: Theme, data: unknown) => Component)
+            | undefined,
+        ) {
+          footer = factory?.(fixture.tui, theme, {});
+        },
+        notify() {},
+      },
+      model: {
+        id: "model",
+        name: "Model",
+        contextWindow: 100_000,
+        reasoning: false,
+      },
+      thinkingLevel: "off",
+      sessionManager: {
+        getSessionId: () => sessionId,
+        getEntries: () => [],
+      },
+      getContextUsage: () => ({
+        tokens: 0,
+        contextWindow: 100_000,
+        percent: 0,
+      }),
+    }) as unknown as ExtensionContext;
+
+  const sidebarText = () => {
+    footer?.render(120);
+    const transcriptColumns = stack(stack(fixture.root).children[0]!);
+    return transcriptColumns.entries[1]!.component.render(50).join("\n");
+  };
+
+  return { fixture, handlers, makeContext, requests, sidebarText };
+}
+
 describe("ui customization docked lifecycle", () => {
   test("installs an empty footer and toggles a hydrated 50-column transcript sibling", async () => {
     type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
@@ -309,5 +409,57 @@ describe("ui customization docked lifecycle", () => {
     expect((tui as unknown as { layoutRoot: Component }).layoutRoot).toBe(
       incompatibleRoot,
     );
+  });
+
+  test("drains only the latest cwd requested during a deferred Git refresh", async () => {
+    const harness = makeGitRefreshHarness();
+    const first = harness.makeContext("session", "/repo/first");
+    const middle = harness.makeContext("session", "/repo/middle");
+    const latest = harness.makeContext("session", "/repo/latest");
+
+    harness.handlers.get("session_start")![0]!({}, first);
+    harness.handlers.get("input")![0]!({}, middle);
+    harness.handlers.get("tool_execution_end")![0]!({}, latest);
+    expect(harness.requests.map((request) => request.cwd)).toEqual([
+      "/repo/first",
+    ]);
+
+    harness.requests[0]!.result.resolve(gitResult("/repo/first", "stale"));
+    await waitFor(() => harness.requests.length === 2);
+    expect(harness.requests.map((request) => request.cwd)).toEqual([
+      "/repo/first",
+      "/repo/latest",
+    ]);
+    expect(harness.sidebarText()).not.toContain("stale");
+
+    harness.requests[1]!.result.resolve(gitResult("/repo/latest", "latest"));
+    await waitFor(() => harness.sidebarText().includes("latest"));
+    expect(harness.sidebarText()).toContain("latest");
+  });
+
+  test("does not drop a replacement-session refresh behind deferred exec", async () => {
+    const harness = makeGitRefreshHarness();
+    const replaced = harness.makeContext("replaced", "/repo/replaced");
+    const replacement = harness.makeContext("replacement", "/repo/replacement");
+
+    harness.handlers.get("session_start")![0]!({}, replaced);
+    harness.handlers.get("session_shutdown")![0]!({}, replaced);
+    harness.handlers.get("session_start")![0]!({}, replacement);
+    expect(harness.requests.map((request) => request.cwd)).toEqual([
+      "/repo/replaced",
+    ]);
+
+    harness.requests[0]!.result.resolve(
+      gitResult("/repo/replaced", "stale-session"),
+    );
+    await waitFor(() => harness.requests.length === 2);
+    expect(harness.requests[1]!.cwd).toBe("/repo/replacement");
+    expect(harness.sidebarText()).not.toContain("stale-session");
+
+    harness.requests[1]!.result.resolve(
+      gitResult("/repo/replacement", "replacement-branch"),
+    );
+    await waitFor(() => harness.sidebarText().includes("replacement-branch"));
+    expect(harness.sidebarText()).toContain("replacement-branch");
   });
 });
