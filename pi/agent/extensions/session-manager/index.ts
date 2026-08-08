@@ -44,6 +44,7 @@ export default function sessionManagerExtension(pi: ExtensionAPI) {
           Math.max(0, sessions.length - 1),
         );
         const action = await showSessionManager(
+          pi,
           ctx,
           sessions,
           currentSessionPath,

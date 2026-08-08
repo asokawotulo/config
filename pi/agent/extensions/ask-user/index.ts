@@ -1,9 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text, visibleWidth } from "@earendil-works/pi-tui";
-import {
-  SUPACODE_NOTIFICATION_EVENT,
-  type SupacodeNotification,
-} from "../../lib/supacode-events.ts";
 import { showQuestionnaire } from "./dialog.ts";
 import { ICONS } from "./icons.ts";
 import {
@@ -51,16 +47,7 @@ export default function askUser(pi: ExtensionAPI) {
       if (ctx.mode !== "tui") return reply("no_ui");
       if (signal?.aborted) return reply("cancelled");
 
-      const notification = {
-        title: "Pi needs your input",
-        body:
-          params.questions.length === 1
-            ? params.questions[0]?.question
-            : `${params.questions.length} questions require your input`,
-      } satisfies SupacodeNotification;
-      pi.events.emit(SUPACODE_NOTIFICATION_EVENT, notification);
-
-      const result = await showQuestionnaire(ctx, params.questions, signal);
+      const result = await showQuestionnaire(pi, ctx, params.questions, signal);
       if (result.kind !== "submitted") return reply(result.kind);
 
       const questions = params.questions.map((question, index) =>

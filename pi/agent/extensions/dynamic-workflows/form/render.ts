@@ -1,9 +1,16 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, type Component, type Focusable } from "@earendil-works/pi-tui";
+import { dialogContentWidth, renderDialogBox } from "../../../shared/ui/index.ts";
 
 export const WIDE_DIALOG_WIDTH = 100;
-/** Internal render marker removed before output; used to keep the selected row visible. */
-export const DIALOG_SELECTION_MARKER = "\uE000";
+const DIALOG_COLUMN_GAP = 3;
+
+export function dialogColumnWidths(width: number): { left: number; right: number } {
+  const safeWidth = Math.max(1, width);
+  if (safeWidth < WIDE_DIALOG_WIDTH) return { left: safeWidth, right: safeWidth };
+  const right = Math.max(24, Math.floor(safeWidth * 0.25));
+  return { left: safeWidth - right - DIALOG_COLUMN_GAP, right };
+}
 
 function fit(line: string, width: number): string {
   const clipped = truncateToWidth(line, Math.max(1, width), "");
@@ -16,22 +23,11 @@ export function layoutDialogColumns(left: string[], right: string[], width: numb
   if (safeWidth < WIDE_DIALOG_WIDTH) {
     return [...left.map((line) => fit(line, safeWidth)), "", ...right.map((line) => fit(line, safeWidth))];
   }
-  const gap = 3;
-  const leftWidth = Math.min(30, Math.max(24, Math.floor(safeWidth * 0.28)));
-  const rightWidth = safeWidth - leftWidth - gap;
+  const columns = dialogColumnWidths(safeWidth);
   const height = Math.max(left.length, right.length);
   return Array.from({ length: height }, (_, index) =>
-    `${fit(left[index] ?? "", leftWidth)}${" ".repeat(gap)}${fit(right[index] ?? "", rightWidth)}`,
+    `${fit(left[index] ?? "", columns.left)}${" ".repeat(DIALOG_COLUMN_GAP)}${fit(right[index] ?? "", columns.right)}`,
   );
-}
-
-export function selectedLine(theme: Theme, selected: boolean, text: string): string {
-  const prefix = selected ? theme.fg("accent", "> ") : "  ";
-  return `${selected ? DIALOG_SELECTION_MARKER : ""}${prefix}${selected ? theme.fg("accent", text) : theme.fg("text", text)}`;
-}
-
-export function checkbox(theme: Theme, checked: boolean): string {
-  return theme.fg(checked ? "success" : "muted", checked ? "[x]" : "[ ]");
 }
 
 /** Shared base for form dialogs: caching, focus propagation, framing, and safe-width output. */
@@ -70,9 +66,8 @@ export abstract class DialogComponent<Result> implements Component, Focusable {
   render(width: number): string[] {
     const safeWidth = Math.max(1, width);
     if (this.cachedWidth === safeWidth && this.cachedLines) return this.cachedLines;
-    const border = this.theme.fg("borderAccent", "─".repeat(safeWidth));
-    const lines = [border, ...this.renderDialog(safeWidth), border]
-      .map((line) => truncateToWidth(line, safeWidth, ""));
+    const contentWidth = dialogContentWidth(safeWidth);
+    const lines = renderDialogBox(this.theme, safeWidth, this.renderDialog(contentWidth));
     this.cachedWidth = safeWidth;
     this.cachedLines = lines;
     return lines;

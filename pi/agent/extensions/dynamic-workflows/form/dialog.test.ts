@@ -3,8 +3,12 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import type { RoleDefinition } from "../types.ts";
 import { resolveWorkflow } from "../workflow.ts";
-import { WorkflowDialogComponent } from "./dialog.ts";
-import { layoutDialogColumns, WIDE_DIALOG_WIDTH } from "./render.ts";
+import {
+  WORKFLOW_DIALOG_MAX_HEIGHT,
+  WorkflowDialogComponent,
+  type WorkflowReviewResult,
+} from "./dialog.ts";
+import { dialogColumnWidths, layoutDialogColumns, WIDE_DIALOG_WIDTH } from "./render.ts";
 
 const theme = {
   fg: (_color: string, text: string) => text,
@@ -14,7 +18,7 @@ const theme = {
 
 const tui = {
   requestRender() {},
-  terminal: { rows: 30 },
+  terminal: { rows: 60 },
 } as unknown as TUI;
 
 const role: RoleDefinition = {
@@ -31,7 +35,7 @@ const source = `export const workflow = {
   name: "review me",
   description: "A safe workflow",
   agents: [
-    { id: "first", role: "reader", prompt: "Inspect", dependsOn: [], contextFiles: ["src/first.ts"] },
+    { id: "first", role: "reader", prompt: "Inspect the implementation in full", dependsOn: [], contextFiles: ["src/first.ts"] },
     { id: "second", role: "reader", prompt: "Use {{agents.first.output}}", dependsOn: ["first"], tools: ["read"], skills: [] }
   ]
 };`;
@@ -40,7 +44,7 @@ function dialog(
   input = source,
   resolveSource: (value: string) => ReturnType<typeof resolveWorkflow> = (value) => resolveWorkflow(value, roles),
 ) {
-  let result: ReturnType<typeof resolveWorkflow> | undefined;
+  let result: WorkflowReviewResult | undefined;
   let completed = false;
   const component = new WorkflowDialogComponent({
     tui,
@@ -53,92 +57,102 @@ function dialog(
   return { component, result: () => result, completed: () => completed };
 }
 
-describe("workflow approval dialog", () => {
+describe("workflow confirmation dialog", () => {
   test("uses wide columns and a narrow stacked layout within the viewport", () => {
     const left = ["LEFT", "agent"];
     const right = ["RIGHT", "field"];
     expect(layoutDialogColumns(left, right, WIDE_DIALOG_WIDTH).some((line) => line.includes("LEFT") && line.includes("RIGHT"))).toBe(true);
+    expect(dialogColumnWidths(120)).toEqual({ left: 87, right: 30 });
     const narrow = layoutDialogColumns(left, right, 40);
     expect(narrow.findIndex((line) => line.includes("RIGHT"))).toBeGreaterThan(narrow.findIndex((line) => line.includes("agent")));
 
     for (const width of [42, 120]) {
       const lines = dialog().component.render(width);
+      expect(WORKFLOW_DIALOG_MAX_HEIGHT).toBe("75%");
+      expect(lines.length).toBeLessThanOrEqual(45);
       expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+      expect(lines[0]).toMatch(/^┌─+┐$/);
+      expect(lines.at(-1)).toMatch(/^└─+┘$/);
+      expect(lines.slice(1, -1).every((line) => line.startsWith("│") && line.endsWith("│"))).toBe(true);
+      expect(lines.join("\n")).toContain("Confirm dynamic workflow");
       expect(lines.join("\n")).toContain("review me");
-      expect(lines.join("\n")).toContain("first · reader");
     }
   });
 
-  test("offers multiline approval editing for per-agent context paths", () => {
-    const state = dialog();
-    state.component.handleInput("\t");
-    for (let index = 0; index < 3; index++) state.component.handleInput("\u001b[B");
-    expect(state.component.render(120).join("\n")).toContain("Context files: src/first.ts");
-    state.component.handleInput("\r");
-    expect(state.component.render(120).join("\n")).toContain("one worktree-relative path per line");
+  test("shows the graph and complete subagent capability details", () => {
+    const rendered = dialog().component.render(120).join("\n");
+    expect(rendered).toContain("Workflow graph");
+    expect(rendered).toContain("Subagent capabilities");
+    const headings = rendered.split("\n").find((line) => line.includes("Workflow graph") && line.includes("Subagent capabilities"));
+    expect(headings).toBeDefined();
+    expect(headings!.indexOf("Subagent capabilities")).toBeLessThan(headings!.indexOf("Workflow graph"));
+    expect(rendered).toContain("first");
+    expect(rendered).toContain("second");
+    expect(rendered).toMatch(/│ Role\s+│ reader — Reads safely/);
+    expect(rendered).toMatch(/│ Dependencies\s+│ first/);
+    expect(rendered).toMatch(/│ Tools\s+│ read/);
+    expect(rendered).toMatch(/│ Context files\s+│ src\/first\.ts/);
+    expect(rendered).toMatch(/┌─+┬─+┐/);
+    expect(rendered).not.toContain("role:");
+    expect(rendered).toContain("Inspect the implementation in full");
+    expect(rendered).toContain("Enter — Run");
+    expect(rendered).toContain("Space — Suggest");
+    expect(rendered).toContain("Esc — Cancel");
   });
 
-  test("keeps large forms within the terminal viewport", () => {
-    const manyAgents = `export const workflow = { name: "large", agents: [${Array.from(
-      { length: 12 },
-      (_, index) => `{ id: "a${index}", role: "reader", prompt: "Inspect ${index}", dependsOn: [] }`,
-    ).join(",")}] };`;
-    const state = dialog(manyAgents);
-    state.component.handleInput("\t");
-    for (let index = 0; index < 20; index++) state.component.handleInput("\u001b[B");
-    const lines = state.component.render(120);
-
-    expect(lines.length).toBeLessThanOrEqual(30);
-    expect(lines.join("\n")).toContain("more fields");
-    expect(lines.every((line) => visibleWidth(line) <= 120)).toBe(true);
-  });
-
-  test("valid source opens in the form and final review approves canonical re-resolution", () => {
+  test("Enter runs only after canonical re-resolution", () => {
     let resolves = 0;
     const state = dialog(source, (value) => { resolves++; return resolveWorkflow(value, roles); });
-    expect(state.component.render(120).join("\n")).toContain("Workflow metadata");
-    state.component.handleInput("\t");
-    expect(state.component.render(120).join("\n")).toContain("Agent definition");
-    state.component.handleInput("\t");
-    const review = state.component.render(120).join("\n");
-    expect(review).toContain("Waves: 1[first] → 2[second]");
-    expect(review).toContain("approved context: src/first.ts");
-    expect(review).toContain("16 files / 262144 aggregate bytes");
-    expect(review).toContain("command safety: Bash/Shell commands are inspected by CC Safety Net");
-    expect(review).toContain("blocked commands require an explicit parent-user decision");
-    expect(review).not.toContain("Command overrides");
     state.component.handleInput("\r");
     expect(state.completed()).toBe(true);
-    expect(state.result()?.source.startsWith("export const workflow = {")).toBe(true);
+    const result = state.result();
+    expect(result?.action).toBe("run");
+    if (result?.action === "run") {
+      expect(result.plan.source.startsWith("export const workflow = {")).toBe(true);
+    }
     expect(resolves).toBeGreaterThanOrEqual(2);
   });
 
-  test("resource errors disable approval", () => {
-    const state = dialog(source, () => { throw new Error("unavailable model test/model"); });
-    state.component.handleInput("\t");
-    state.component.handleInput("\t");
-    expect(state.component.render(100).join("\n")).toContain("Approval disabled");
-    expect(state.component.render(100).join("\n")).toContain("unavailable model");
+  test("Space collects a free-text suggestion without running", () => {
+    const state = dialog();
+    state.component.focused = true;
+    state.component.handleInput(" ");
+    expect(state.component.render(100).join("\n")).toContain("Suggest a workflow revision");
+    expect(state.component.render(100).join("\n")).toContain(CURSOR_MARKER);
+    for (const character of "Add a parallel test researcher") state.component.handleInput(character);
     state.component.handleInput("\r");
-    expect(state.completed()).toBe(false);
+    expect(state.result()).toEqual({ action: "suggest", suggestion: "Add a parallel test researcher" });
   });
 
-  test("raw source is an explicit escape hatch and invalid-source recovery keeps Editor IME focus", () => {
-    const valid = dialog();
-    valid.component.handleInput("r");
-    expect(valid.component.render(80).join("\n")).toContain("Raw source escape hatch");
+  test("Escape returns from suggestions, then cancels confirmation", () => {
+    const state = dialog();
+    state.component.handleInput(" ");
+    state.component.handleInput("\u001b");
+    expect(state.completed()).toBe(false);
+    expect(state.component.render(100).join("\n")).toContain("Confirm dynamic workflow");
+    state.component.handleInput("\u001b");
+    expect(state.result()).toEqual({ action: "cancel" });
+  });
 
-    const invalid = dialog("export const workflow = nope;");
-    invalid.component.focused = true;
-    const rendered = invalid.component.render(80).join("\n");
+  test("resource errors disable Run while Suggest remains available", () => {
+    const state = dialog(source, () => { throw new Error("unavailable model test/model"); });
+    const rendered = state.component.render(100).join("\n");
+    expect(rendered).toContain("Run is disabled");
+    expect(rendered).toContain("unavailable model");
+    state.component.handleInput("\r");
+    expect(state.completed()).toBe(false);
+    state.component.handleInput(" ");
+    expect(state.component.render(100).join("\n")).toContain("Suggest a workflow revision");
+  });
+
+  test("invalid-source recovery keeps Editor IME focus and parses into confirmation", () => {
+    const state = dialog("export const workflow = nope;");
+    state.component.focused = true;
+    const rendered = state.component.render(80).join("\n");
     expect(rendered).toContain("Raw source recovery");
     expect(rendered).toContain("static");
     expect(rendered).toContain(CURSOR_MARKER);
-    invalid.component.focused = false;
-    expect(invalid.component.render(80).join("\n")).not.toContain(CURSOR_MARKER);
-    invalid.component.focused = true;
-    expect(invalid.component.render(80).join("\n")).toContain(CURSOR_MARKER);
-    invalid.component.handleInput("\u001b");
-    expect(invalid.completed()).toBe(true);
+    state.component.focused = false;
+    expect(state.component.render(80).join("\n")).not.toContain(CURSOR_MARKER);
   });
 });

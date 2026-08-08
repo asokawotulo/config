@@ -8,6 +8,7 @@ import {
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import {
+  dialogContentWidth,
   keybindingHint,
   renderDialogFrame,
 } from "../../shared/ui/index.ts";
@@ -155,7 +156,8 @@ export function renderQuestionnaire(
   width: number,
   keybindings?: KeybindingsManager,
 ) {
-  const renderWidth = Math.max(1, width);
+  const frameWidth = Math.max(1, width);
+  const renderWidth = dialogContentWidth(frameWidth);
   const lines: string[] = [];
 
   if (state.screen === state.questions.length) {
@@ -202,7 +204,7 @@ export function renderQuestionnaire(
       }
     });
 
-    return renderDialogFrame(theme, renderWidth, {
+    return renderDialogFrame(theme, frameWidth, {
       header: [renderTabs(state, theme, renderWidth)],
       body: lines,
       hints: [
@@ -226,7 +228,7 @@ export function renderQuestionnaire(
   const question = state.questions[state.screen];
   const answer = state.answers[state.screen];
   if (!question || !answer) {
-    return renderDialogFrame(theme, renderWidth, {
+    return renderDialogFrame(theme, frameWidth, {
       header: [renderTabs(state, theme, renderWidth)],
       body: lines,
       hints: [],
@@ -352,7 +354,7 @@ export function renderQuestionnaire(
           ),
         ];
 
-  return renderDialogFrame(theme, renderWidth, {
+  return renderDialogFrame(theme, frameWidth, {
     header: [renderTabs(state, theme, renderWidth)],
     body: lines,
     hints,

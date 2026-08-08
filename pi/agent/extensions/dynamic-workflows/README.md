@@ -1,6 +1,6 @@
 # Dynamic Workflows
 
-`dynamic_workflow` lets the parent model propose a complete static DAG of isolated Pi agents. A valid proposal opens directly in a structured approval form; invalid source opens in raw-source recovery. Nothing starts until the form is error-free and the user approves the final review.
+`dynamic_workflow` lets the parent model propose a complete static DAG of isolated Pi agents. A valid proposal opens directly on a confirmation page; invalid source opens in raw-source recovery. Nothing starts until the proposal validates and the user confirms it.
 
 ## Workflow format
 
@@ -42,20 +42,15 @@ Only static object, array, and primitive literals are accepted. Imports, functio
 
 Each agent may declare `contextFiles`, an optional list of up to **16** worktree-relative paths. At approval/execution boundaries these resolve against the workflow cwd. Absolute/traversing paths, paths escaping through symlinks, missing or non-regular files, duplicate files, paths over 1,024 bytes, files over **131,072 bytes**, and a per-agent aggregate over **262,144 bytes** are rejected. Approved files are read once into a reusable bundle with path headings and explicit untrusted-content/soft-scope guidance; they are starting context, not a sandbox or instructions embedded in the files.
 
-## Approval form
+## Confirmation
 
-The form uses a two-column agent navigator and detail view on wide terminals, and stacks the same regions on narrow terminals. It provides structured controls for:
+Valid proposals open directly on a read-only confirmation page. On wide terminals subagent details use roughly three quarters of the page on the left and a top-down Mermaid workflow graph uses the remaining quarter on the right; narrow terminals stack them. The page shows the workflow name and description plus a bordered field/value table for every agent's id, role, model, full prompt, dependencies, effective tools and skills, and approved context paths. It also shows context bounds and the CC Safety Net command-inspection contract.
 
-- workflow name and description;
-- agent id, role, multiline prompt, dependencies, and one-path-per-line context files;
-- role-narrowed tools and skills;
-- adding, deleting, navigating, and reordering agents.
+Pi's terminal Mermaid renderer draws the DAG with Unicode box art. If full agent labels do not fit the graph column, it renders a numbered top-down Mermaid graph with an agent legend; only widths too narrow for that use the wrapped dependency-edge fallback. Workflow information is never clipped.
 
-Use **Tab/Shift+Tab** to move among Workflow, Agents, and Review, arrow keys to navigate controls, **Enter** to edit or toggle, **[ / ]** to change agents, **a** to add, **x** to delete, and **Ctrl+Up/Down** to reorder. Embedded multiline editors support terminal cursor/IME propagation.
+The overlay is capped at 75% of terminal height so it stays clear of the editor; long tables and graphs remain accessible with **Up/Down** scrolling. Use **Enter** to run, **Space** to suggest a revision, and **Escape** to cancel. Suggest opens a multiline text field; **Enter** submits non-empty feedback, **Shift+Enter** inserts a line, and **Escape** returns to confirmation. Submission rejects the current proposal without launching agents and returns the feedback to the parent model, which must apply it and call `dynamic_workflow` again with a complete revised DAG.
 
-The final Review shows dependency waves, resolved models and resources, approved context paths and bounds, and the CC Safety Net command-inspection contract. Approval is disabled while draft, role/resource, DAG, or output-reference errors remain. On approval the draft is serialized into canonical static source, then `resolveWorkflow` and runtime model/tool/skill/context validation run again before execution.
-
-Press **r** to use raw source explicitly. Raw mode is also the recovery path when the proposed source cannot be parsed; source must parse back into the structured form and pass the same review before it can run.
+Run is disabled while role/resource, DAG, output-reference, model/tool/skill, or context validation fails, but Suggest and Cancel remain available. On Run, canonical static source is resolved and runtime resources are validated again before execution. Raw source editing remains only as recovery when the proposed source cannot be parsed; successful parsing proceeds to confirmation.
 
 ## Roles
 

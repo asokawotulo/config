@@ -1,5 +1,4 @@
 import type { WorkflowAgentDefinition, WorkflowDefinition } from "../types.ts";
-import type { WorkflowDraft } from "./types.ts";
 
 function canonicalAgent(agent: WorkflowAgentDefinition): WorkflowAgentDefinition {
   return {
@@ -13,21 +12,19 @@ function canonicalAgent(agent: WorkflowAgentDefinition): WorkflowAgentDefinition
   };
 }
 
-/** Return a detached object with canonical field ordering. */
-export function canonicalWorkflow(draft: WorkflowDraft): WorkflowDefinition {
+/** Return a detached definition with canonical field ordering. */
+export function canonicalWorkflow(definition: WorkflowDefinition): WorkflowDefinition {
   return {
-    name: draft.name,
-    ...(draft.description === undefined ? {} : { description: draft.description }),
-    agents: draft.agents.map(canonicalAgent),
+    name: definition.name,
+    ...(definition.description === undefined ? {} : { description: definition.description }),
+    agents: definition.agents.map(canonicalAgent),
   };
 }
 
-/** Serialize a draft as the only source form accepted by parseWorkflow. */
-export function serializeWorkflowDraft(draft: WorkflowDraft): string {
-  const json = JSON.stringify(canonicalWorkflow(draft), null, 2)
+/** Serialize a definition as the only source form accepted by parseWorkflow. */
+export function serializeWorkflow(definition: WorkflowDefinition): string {
+  const json = JSON.stringify(canonicalWorkflow(definition), null, 2)
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
   return `export const workflow = ${json};\n`;
 }
-
-export const serializeWorkflow = serializeWorkflowDraft;

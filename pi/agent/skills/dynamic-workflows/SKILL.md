@@ -5,7 +5,7 @@ description: Designs and launches editable, statically declared DAGs of speciali
 
 # Dynamic Workflows
 
-Design a complete subagent graph, submit it through `dynamic_workflow`, and let the user review the structured approval form before anything runs.
+Design a complete subagent graph, submit it through `dynamic_workflow`, and let the user confirm, suggest revisions to, or cancel it before anything runs.
 
 ## When to Use
 
@@ -118,13 +118,13 @@ Prefer least privilege:
 
 Every Bash/Shell command is inspected solely by `cc-safety-net explain --json`. Allowed commands run automatically. A blocked command opens a serialized user prompt that shows CC Safety Net's reason and offers **Allow once**, **Edit command**, and **Deny**; edited commands are re-analyzed. Never design a workflow that depends on the user approving a destructive command.
 
-## Approval and Execution
+## Confirmation and Execution
 
 After calling `dynamic_workflow`:
 
-1. The user receives a structured form rather than raw code by default.
-2. They can edit metadata, agents, roles, prompts, dependencies, tools, and skills.
-3. The Review section must validate before approval.
+1. The user receives a confirmation page with the Mermaid-rendered DAG and complete subagent capabilities rather than raw code by default.
+2. **Enter** runs a valid proposal, **Space** opens free-text suggestions, and **Escape** cancels.
+3. When the tool returns a user suggestion, apply it to the complete workflow and call `dynamic_workflow` again with a revised static DAG. Do not run or merely explain the rejected proposal.
 4. Cancellation means no subagent runs; acknowledge it without immediately resubmitting.
 5. During execution, the sidebar shows current-session workflows and subagent states.
 6. `/workflows` shows persisted run details, results, errors, and permission decisions.

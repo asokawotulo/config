@@ -1,4 +1,5 @@
 import type {
+  ExtensionAPI,
   ExtensionContext,
   KeybindingsManager,
   Theme,
@@ -14,6 +15,7 @@ import {
 import {
   centeredDialogOverlay,
   DialogComponent,
+  showDialog,
 } from "../../shared/ui/index.ts";
 import { renderQuestionnaire } from "./render.ts";
 import { DialogSettler, QuestionnaireState } from "./state.ts";
@@ -136,11 +138,14 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
 }
 
 export function showQuestionnaire(
+  pi: ExtensionAPI,
   ctx: ExtensionContext,
   questions: Question[],
   signal?: AbortSignal,
 ) {
-  return ctx.ui.custom<DialogResult>(
+  return showDialog<DialogResult>(
+    pi,
+    ctx,
     (tui, theme, keybindings, done) =>
       new QuestionnaireDialog(
         tui,
@@ -151,7 +156,12 @@ export function showQuestionnaire(
         done,
       ),
     {
-      overlay: true,
+      notification: {
+        title: "Pi needs your input",
+        body: questions.length === 1
+          ? questions[0]?.question
+          : `${questions.length} questions require your input`,
+      },
       overlayOptions: centeredDialogOverlay({
         width: "75%",
         minWidth: 40,

@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type {
+  ExtensionAPI,
   ExtensionContext,
   KeybindingsManager,
   SessionInfo,
@@ -13,9 +14,11 @@ import {
 } from "@earendil-works/pi-tui";
 import {
   centeredDialogOverlay,
+  dialogContentWidth,
   DialogComponent,
   keybindingHint,
   renderDialogFrame,
+  showDialog,
 } from "../../shared/ui/index.ts";
 import { DELETE_WINDOW_MS, SessionManagerState } from "./state.ts";
 import type { SessionManagerAction } from "./types.ts";
@@ -171,7 +174,8 @@ class SessionManagerDialog extends DialogComponent {
   }
 
   protected renderContent(width: number): string[] {
-    const safeWidth = Math.max(1, width);
+    const frameWidth = Math.max(1, width);
+    const safeWidth = dialogContentWidth(frameWidth);
     const lines: string[] = [];
 
     if (this.sessions.length === 0) {
@@ -235,7 +239,7 @@ class SessionManagerDialog extends DialogComponent {
       }
     }
 
-    return renderDialogFrame(this.theme, safeWidth, {
+    return renderDialogFrame(this.theme, frameWidth, {
       title: "Session Manager",
       body: lines,
       status: this.status,
@@ -266,12 +270,15 @@ class SessionManagerDialog extends DialogComponent {
 }
 
 export function showSessionManager(
+  pi: ExtensionAPI,
   ctx: ExtensionContext,
   sessions: SessionInfo[],
   currentSessionPath: string | undefined,
   selectedIndex: number,
 ): Promise<SessionManagerAction> {
-  return ctx.ui.custom<SessionManagerAction>(
+  return showDialog<SessionManagerAction>(
+    pi,
+    ctx,
     (tui, theme, keybindings, done) =>
       new SessionManagerDialog(
         tui,
@@ -283,7 +290,10 @@ export function showSessionManager(
         done,
       ),
     {
-      overlay: true,
+      notification: {
+        title: "Pi needs your input",
+        body: "Manage sessions",
+      },
       overlayOptions: centeredDialogOverlay({
         width: OVERLAY_WIDTH,
         minWidth: 44,

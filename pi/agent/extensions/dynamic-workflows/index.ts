@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { centeredDialogOverlay } from "../../shared/ui/index.ts";
+import { centeredDialogOverlay, showDialog } from "../../shared/ui/index.ts";
 import {
   DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT,
   DYNAMIC_WORKFLOW_RUN_EVENT,
@@ -18,7 +18,11 @@ import {
   type DynamicWorkflowStateRequestEvent,
   type DynamicWorkflowTargetedControlEvent,
 } from "../../lib/dynamic-workflow-events.ts";
-import { WorkflowDialogComponent } from "./form/dialog.ts";
+import {
+  WORKFLOW_DIALOG_MAX_HEIGHT,
+  WorkflowDialogComponent,
+  type WorkflowReviewResult,
+} from "./form/dialog.ts";
 import { PermissionApprovalQueue } from "./permissions.ts";
 import { loadRoles } from "./roles.ts";
 import { aggregateAgentUsage, controlRunningAgent, runAgent } from "./runner.ts";
@@ -44,10 +48,10 @@ function validateResources(plan: ResolvedWorkflow, pi: ExtensionAPI, ctx: Extens
   }
 }
 
-async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): Promise<ResolvedWorkflow | undefined> {
-  if (ctx.mode !== "tui") throw new Error("Dynamic workflows require interactive TUI mode for editable approval");
+async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): Promise<WorkflowReviewResult> {
+  if (ctx.mode !== "tui") throw new Error("Dynamic workflows require interactive TUI mode for confirmation");
   const roles = loadRoles();
-  return ctx.ui.custom<ResolvedWorkflow | undefined>((tui, theme, _keybindings, done) =>
+  const result = await showDialog<WorkflowReviewResult | undefined>(pi, ctx, (tui, theme, _keybindings, done) =>
     new WorkflowDialogComponent({
       tui,
       theme,
@@ -61,14 +65,18 @@ async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): 
       onDone: done,
     }),
     {
-      overlay: true,
+      notification: {
+        title: "Pi needs your input",
+        body: "Review dynamic workflow",
+      },
       overlayOptions: centeredDialogOverlay({
         width: "90%",
         minWidth: 50,
-        maxHeight: "90%",
+        maxHeight: WORKFLOW_DIALOG_MAX_HEIGHT,
       }),
     },
   );
+  return result ?? { action: "cancel" };
 }
 
 async function mapLimit<T>(
@@ -268,7 +276,7 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
     name: "dynamic_workflow",
     label: "Dynamic Workflow",
     description: [
-      "Propose a complete static subagent DAG and run it only after editable user approval.",
+      "Propose a complete static subagent DAG and run it only after user confirmation.",
       "The script must be exactly `export const workflow = { name, description?, agents }` using static literals.",
       "Each agent requires id, role, prompt, and dependsOn. Optional contextFiles preload approved worktree files; tools and skills may only narrow its role.",
       "Declare every agent up front. Agents in the same dependency wave run in parallel. Use {{agents.ID.output}} in dependent prompts.",
@@ -278,8 +286,20 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
     parameters: Type.Object({ script: Type.String({ description: "Static JavaScript workflow definition" }) }),
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const plan = await review(params.script, pi, ctx);
-      if (!plan) return { content: [{ type: "text", text: "Dynamic workflow cancelled before execution." }], details: { cancelled: true } };
+      const reviewResult = await review(params.script, pi, ctx);
+      if (reviewResult.action === "cancel") {
+        return { content: [{ type: "text", text: "Dynamic workflow cancelled before execution." }], details: { cancelled: true } };
+      }
+      if (reviewResult.action === "suggest") {
+        return {
+          content: [{
+            type: "text",
+            text: `The user requested a workflow revision. Apply the suggestion below and call dynamic_workflow again with a complete revised static workflow. Do not run the rejected workflow.\n\nSuggestion:\n${reviewResult.suggestion}`,
+          }],
+          details: { suggested: true, suggestion: reviewResult.suggestion },
+        };
+      }
+      const plan = reviewResult.plan;
 
       const runId = `wf_${randomBytes(6).toString("hex")}`;
       const run: WorkflowRun = {
