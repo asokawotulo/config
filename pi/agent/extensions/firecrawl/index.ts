@@ -9,6 +9,7 @@ import { Type } from "typebox";
 import { cachedRequest } from "./cache.ts";
 import { createFirecrawlClient } from "./client.ts";
 import { crawlEffect } from "./crawl.ts";
+import { errorMessage } from "./error.ts";
 import { formatForModel, stringify } from "./output.ts";
 import {
   CACHE_MODE_DESCRIPTION,
@@ -27,7 +28,6 @@ import {
 } from "./prompt.ts";
 import type {
   CacheMode,
-  CacheResolution,
   CachedPayload,
   FirecrawlOperation,
   OutputFormat,
@@ -38,10 +38,6 @@ const CacheModeParameter = Type.Optional(
     description: CACHE_MODE_DESCRIPTION,
   }),
 );
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 async function runOperation<T>(options: {
   operation: FirecrawlOperation;
@@ -65,12 +61,13 @@ async function runOperation<T>(options: {
   } = options;
 
   try {
-    const result: CacheResolution<T> = await cachedRequest({
+    const result = await cachedRequest({
       operation,
       request,
       mode: cacheMode ?? "prefer-cache",
       outputFormat,
       signal,
+      loadDetails: false,
       fetch: async () => {
         onUpdate?.({
           content: [{ type: "text", text: status }],
@@ -89,7 +86,7 @@ async function runOperation<T>(options: {
     return {
       content: [{ type: "text" as const, text: output }],
       details: {
-        result: result.details,
+        operation,
         cache: {
           hit: result.cacheHit,
           directory: result.cacheDirectory,

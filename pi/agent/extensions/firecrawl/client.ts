@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Firecrawl } from "firecrawl";
 
-export function readEnvValue(name: string): string | undefined {
+function readEnvValue(name: string): string | undefined {
   const environmentValue = process.env[name];
   if (environmentValue) return environmentValue;
 

@@ -23,7 +23,9 @@ export interface CacheMetadata {
   artifacts: string[];
 }
 
-export interface CacheResolution<T> extends CachedPayload<T> {
+export interface CacheResolution<T> {
+  details?: T;
+  output: string;
   cacheHit: boolean;
   cacheDirectory?: string;
   outputPath?: string;

@@ -1,16 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { setTimeout as sleep } from "node:timers/promises";
+import { acquireLock } from "./lock.ts";
 import type {
   CacheMetadata,
   CacheMode,
@@ -25,16 +18,13 @@ const require = createRequire(import.meta.url);
 const FIRECRAWL_SDK_VERSION = (
   require("firecrawl/package.json") as { version: string }
 ).version;
-const LOCK_STALE_MS = 20 * 60 * 1_000;
-const LOCK_POLL_MS = 100;
-
-export const DEFAULT_CACHE_TTL_MS: Record<FirecrawlOperation, number> = {
+const DEFAULT_CACHE_TTL_MS: Record<FirecrawlOperation, number> = {
   search: 6 * 60 * 60 * 1_000,
   scrape: 7 * 24 * 60 * 60 * 1_000,
   crawl: 7 * 24 * 60 * 60 * 1_000,
 };
 
-export function firecrawlCacheRoot(): string {
+function firecrawlCacheRoot(): string {
   return (
     process.env.FIRECRAWL_CACHE_DIR ??
     join(homedir(), ".firecrawl", "results")
@@ -54,7 +44,7 @@ function canonicalize(value: unknown): unknown {
   return value;
 }
 
-export function canonicalJson(value: unknown): string {
+function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalize(value), null, 2);
 }
 
@@ -86,6 +76,7 @@ async function readEntry<T>(
   operation: FirecrawlOperation,
   request: unknown,
   now: number,
+  loadDetails: boolean,
 ): Promise<CacheResolution<T> | undefined> {
   const { hash, directory } = paths(operation, request);
   try {
@@ -101,12 +92,16 @@ async function readEntry<T>(
       return undefined;
     }
 
-    const [detailsText, output] = await Promise.all([
-      readFile(join(directory, "details.json"), "utf8"),
+    const [output, details] = await Promise.all([
       readFile(join(directory, metadata.outputFile), "utf8"),
+      loadDetails
+        ? readFile(join(directory, "details.json"), "utf8").then(
+            (text) => JSON.parse(text) as T,
+          )
+        : Promise.resolve(undefined),
     ]);
     return {
-      details: JSON.parse(detailsText) as T,
+      ...(loadDetails ? { details } : {}),
       output,
       cacheHit: true,
       cacheDirectory: directory,
@@ -221,38 +216,6 @@ async function writeEntry<T>(options: {
   }
 }
 
-async function acquireLock(
-  lockDirectory: string,
-  signal: AbortSignal | undefined,
-): Promise<void> {
-  while (true) {
-    if (signal?.aborted) throw new Error("Firecrawl request cancelled");
-    try {
-      await mkdir(lockDirectory, { mode: 0o700 });
-      await writeFile(
-        join(lockDirectory, "owner.json"),
-        `${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`,
-        { mode: 0o600 },
-      );
-      return;
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
-
-      try {
-        const lockStat = await stat(lockDirectory);
-        if (Date.now() - lockStat.mtimeMs > LOCK_STALE_MS) {
-          await rm(lockDirectory, { recursive: true, force: true });
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      await sleep(LOCK_POLL_MS, undefined, signal ? { signal } : undefined);
-    }
-  }
-}
-
 export async function cachedRequest<T>(options: {
   operation: FirecrawlOperation;
   request: unknown;
@@ -260,14 +223,28 @@ export async function cachedRequest<T>(options: {
   outputFormat: OutputFormat;
   signal?: AbortSignal;
   ttlMs?: number;
+  loadDetails?: boolean;
   fetch: () => Promise<CachedPayload<T>>;
 }): Promise<CacheResolution<T>> {
-  const { operation, request, mode, outputFormat, signal, fetch } = options;
+  const {
+    operation,
+    request,
+    mode,
+    outputFormat,
+    signal,
+    fetch,
+    loadDetails = true,
+  } = options;
   const now = Date.now();
 
   if (mode === "no-store") {
     const payload = await fetch();
-    return { ...payload, cacheHit: false, fetchedAt: new Date(now).toISOString() };
+    return {
+      ...(loadDetails ? { details: payload.details } : {}),
+      output: payload.output,
+      cacheHit: false,
+      fetchedAt: new Date(now).toISOString(),
+    };
   }
 
   const { operationDirectory, lockDirectory } = paths(operation, request);
@@ -275,7 +252,7 @@ export async function cachedRequest<T>(options: {
   await acquireLock(lockDirectory, signal);
   try {
     if (mode === "prefer-cache") {
-      const hit = await readEntry<T>(operation, request, Date.now());
+      const hit = await readEntry<T>(operation, request, Date.now(), loadDetails);
       if (hit) return hit;
     }
 
@@ -290,7 +267,8 @@ export async function cachedRequest<T>(options: {
       now: fetchedAtMs,
     });
     return {
-      ...payload,
+      ...(loadDetails ? { details: payload.details } : {}),
+      output: payload.output,
       cacheHit: false,
       cacheDirectory: stored.directory,
       outputPath: stored.outputPath,

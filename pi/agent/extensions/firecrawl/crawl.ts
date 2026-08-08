@@ -1,21 +1,18 @@
 import { Data, Effect, Exit } from "effect";
 import type { CrawlJob, CrawlOptions, Firecrawl } from "firecrawl";
+import { errorMessage } from "./error.ts";
 
 export type CrawlClient = Pick<
   Firecrawl,
   "startCrawl" | "getCrawlStatus" | "cancelCrawl"
 >;
 
-export class FirecrawlRequestError extends Data.TaggedError(
+class FirecrawlRequestError extends Data.TaggedError(
   "FirecrawlRequestError",
 )<{
   readonly message: string;
   readonly cause: unknown;
 }> {}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function request<T>(run: () => Promise<T>) {
   return Effect.tryPromise({

@@ -26,5 +26,8 @@ Every tool accepts `cacheMode`:
 - `no-store` neither reads nor writes the shared cache.
 
 Each request directory contains `metadata.json`, `request.json`,
-`details.json`, and the model-facing `output.json` or `output.md`. Crawl
-entries also expose individual markdown documents under `documents/`.
+`details.json`, and the model-facing `output.json` or `output.md`. The complete
+raw API payload remains in `details.json`; tool-result details contain only
+compact operation and cache metadata, so cache hits do not reload the raw
+payload. Crawl entries also expose individual markdown documents under
+`documents/`.
