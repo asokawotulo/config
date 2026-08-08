@@ -11,6 +11,7 @@ import {
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { Usage } from "@earendil-works/pi-ai";
+import { utf8BytePrefix } from "../../lib/text.ts";
 
 export const CHILD_PROTOCOL_VERSION = 1;
 export const MAX_AGENT_SUMMARY_BYTES = 32 * 1024;
@@ -171,31 +172,9 @@ export function writeChildControl(paths: ChildArtifactPaths, action: ChildContro
 export function truncateUtf8(value: string, maxBytes = MAX_AGENT_SUMMARY_BYTES): string {
   if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
   const suffix = "\n[summary truncated]";
-  const budget = Math.max(0, maxBytes - Buffer.byteLength(suffix, "utf8"));
-  let bytes = Buffer.from(value, "utf8").subarray(0, budget);
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let prefix = "";
-  while (bytes.length) {
-    try { prefix = decoder.decode(bytes); break; }
-    catch { bytes = bytes.subarray(0, bytes.length - 1); }
-  }
-  return `${prefix}${suffix}`;
-}
-
-export function lastAssistantSummary(messages: readonly unknown[]): string {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const raw = messages[index];
-    if (!raw || typeof raw !== "object") continue;
-    const message = raw as { role?: string; content?: Array<{ type?: string; text?: string }> };
-    if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
-    const text = message.content
-      .filter((part) => part?.type === "text" && typeof part.text === "string")
-      .map((part) => part.text)
-      .join("\n")
-      .trim();
-    if (text) return truncateUtf8(text);
-  }
-  return "";
+  const suffixBytes = Buffer.byteLength(suffix, "utf8");
+  if (maxBytes <= suffixBytes) return utf8BytePrefix(suffix, maxBytes);
+  return `${utf8BytePrefix(value, maxBytes - suffixBytes)}${suffix}`;
 }
 
 export function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {

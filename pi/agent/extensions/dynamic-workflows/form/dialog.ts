@@ -68,7 +68,6 @@ function renderAgentTable(theme: Theme, width: number, fields: AgentTableField[]
 
   const keyCellWidth = Math.min(17, Math.max(15, Math.floor(safeWidth * 0.22)));
   const valueCellWidth = safeWidth - keyCellWidth - 3;
-  const keyContentWidth = keyCellWidth - 2;
   const valueContentWidth = valueCellWidth - 2;
   const border = (left: string, middle: string, right: string) => theme.fg(
     "borderMuted",

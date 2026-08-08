@@ -7,6 +7,7 @@ import type {
   ResolvedContextFile,
   ResolvedWorkflow,
   RoleDefinition,
+  RoleLoadDiagnostic,
   WorkflowAgentDefinition,
   WorkflowDefinition,
 } from "./types.ts";
@@ -318,13 +319,22 @@ function subset(requested: string[] | undefined, allowed: string[], field: strin
   return requested;
 }
 
-export function resolveWorkflow(source: string, roles: ReadonlyMap<string, RoleDefinition>, cwd?: string): ResolvedWorkflow {
+export function resolveWorkflow(
+  source: string,
+  roles: ReadonlyMap<string, RoleDefinition>,
+  cwd?: string,
+  roleDiagnostics: readonly RoleLoadDiagnostic[] = [],
+): ResolvedWorkflow {
   const definition = parseWorkflow(source);
   const waves = workflowWaves(definition.agents);
   validateWorkflowOutputReferences(definition.agents);
   const agents: ResolvedAgentDefinition[] = definition.agents.map((agent) => {
     const role = roles.get(agent.role);
-    if (!role) throw new Error(`Unknown role ${agent.role}`);
+    if (!role) {
+      const diagnostic = roleDiagnostics.find((item) => item.name === agent.role);
+      if (diagnostic) throw new Error(`Role ${agent.role} is invalid: ${diagnostic.error}`);
+      throw new Error(`Unknown role ${agent.role}`);
+    }
     return {
       ...agent,
       resolvedRole: role,

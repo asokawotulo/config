@@ -15,7 +15,6 @@ import {
   childArtifactPaths,
   delay,
   initializeChildArtifacts,
-  lastAssistantSummary,
   listPermissionRequests,
   permissionResponsePath,
   readJson,
@@ -25,7 +24,8 @@ import {
   type ChildStatus,
   type PermissionResponse,
 } from "./protocol.ts";
-import type { AgentRunRecord, PermissionDecisionRecord, ResolvedAgentDefinition } from "./types.ts";
+import { classifyAssistantSettlement } from "./settlement.ts";
+import type { AgentRunRecord, ClassifyAssistantSettlementResult, PermissionDecisionRecord, ResolvedAgentDefinition } from "./types.ts";
 import { aggregateUsage, isCompleteUsage, usageFromSessionEntries } from "./usage.ts";
 import {
   collisionSafeZmxName,
@@ -41,13 +41,9 @@ const ABORT_SETTLE_TIMEOUT_MS = 5_000;
 const CONTEXT_FIRST_INSTRUCTION = "Use the supplied approved context files first. Explore other worktree files only when those files are insufficient to complete the task correctly.";
 const FINAL_HANDOFF_INSTRUCTION = "Finish with one concise handoff summary containing only the findings or changes, focused verification, and unresolved issues needed by the parent or dependent agents. Do not replay the conversation or tool transcript.";
 
-export interface RunAgentResult {
-  ok: boolean;
-  finalSummary: string;
+export interface RunAgentResult extends ClassifyAssistantSettlementResult {
   /** @deprecated Compatibility alias; always identical to finalSummary. */
   output: string;
-  error?: string;
-  cancelled?: boolean;
 }
 
 export interface RunAgentOptions {
@@ -79,6 +75,18 @@ export function controlRunningAgent(runId: string, agentId: string, action: Cont
 
 function result(ok: boolean, finalSummary: string, error?: string, cancelled = false): RunAgentResult {
   return { ok, finalSummary, output: finalSummary, ...(error ? { error } : {}), ...(cancelled ? { cancelled: true } : {}) };
+}
+
+/** Update coarse activity once; repeated stream deltas do not trigger parent progress. */
+export function updateAgentActivity(record: AgentRunRecord, activity: string): boolean {
+  if (record.activity === activity && record.sidebarActivity === activity) return false;
+  record.activity = activity;
+  record.sidebarActivity = activity;
+  return true;
+}
+
+function reportActivity(options: RunAgentOptions, activity: string): void {
+  if (updateAgentActivity(options.record, activity)) options.onProgress();
 }
 
 function childSystemPrompt(agent: ResolvedAgentDefinition): string {
@@ -176,17 +184,9 @@ async function runEmbedded(options: RunAgentOptions, model: NonNullable<ReturnTy
       ...(child.sessionFile ? { sessionFile: child.sessionFile } : {}),
     };
     const unsubscribe = child.subscribe((event) => {
-      if (event.type === "tool_execution_start") {
-        options.record.activity = `Using ${event.toolName}`;
-        options.record.sidebarActivity = `Using ${event.toolName}`;
-      } else if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-        options.record.activity = "Writing response";
-        options.record.sidebarActivity = "Writing response";
-      } else if (event.type === "message_end" && event.message.role === "assistant") {
-        options.record.activity = "Response complete";
-        options.record.sidebarActivity = "Response complete";
-      } else return;
-      options.onProgress();
+      if (event.type === "tool_execution_start") reportActivity(options, `Using ${event.toolName}`);
+      else if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") reportActivity(options, "Writing response");
+      else if (event.type === "message_end" && event.message.role === "assistant") reportActivity(options, "Response complete");
     });
     const control = (_action: ControlAction) => {
       // Both targeted actions abort the active child context. The persistent
@@ -204,16 +204,11 @@ async function runEmbedded(options: RunAgentOptions, model: NonNullable<ReturnTy
       activeControls.delete(key);
       unsubscribe();
     }
-    const summary = lastAssistantSummary(child.messages);
     options.record.usage = usageFromSessionEntries(sessionManager.getEntries());
-    const lastAssistant = [...child.messages].reverse().find((message) => message.role === "assistant");
-    const aborted = lastAssistant?.role === "assistant" && lastAssistant.stopReason === "aborted";
-    const error = lastAssistant?.role === "assistant" && (lastAssistant.stopReason === "error" || aborted)
-      ? lastAssistant.errorMessage ?? (aborted ? "Agent interrupted" : "Agent failed")
-      : undefined;
-    return result(!error, summary, error, aborted);
+    const settlement: ClassifyAssistantSettlementResult = classifyAssistantSettlement(child.messages);
+    return result(settlement.ok, settlement.finalSummary, settlement.error, settlement.cancelled);
   } catch (error) {
-    const summary = session ? lastAssistantSummary(session.messages) : "";
+    const summary = session ? classifyAssistantSettlement(session.messages).finalSummary : "";
     return result(false, summary, error instanceof Error ? error.message : String(error));
   } finally {
     activeControls.delete(key);
@@ -269,9 +264,7 @@ async function runZmx(options: RunAgentOptions, zmxPath: string): Promise<RunAge
     model: options.agent.resolvedRole.model.split("/").slice(1).join("/"),
     zmxSessionId: sessionName,
   };
-  options.record.activity = "Starting detached Pi TUI";
-  options.record.sidebarActivity = "Starting detached Pi TUI";
-  options.onProgress();
+  reportActivity(options, "Starting detached Pi TUI");
 
   const key = controlKey(options.runId, options.agent.id);
   let abortWrittenAt: number | undefined;
@@ -319,11 +312,15 @@ async function runZmx(options: RunAgentOptions, zmxPath: string): Promise<RunAge
             return result(false, "", "Detached Pi child published malformed settled status");
           }
           options.record.usage = status.usage;
-          options.record.activity = "Response complete";
-          options.record.sidebarActivity = "Response complete";
+          reportActivity(options, "Response complete");
+          const finalSummary = truncateUtf8(status.finalSummary);
+          if (status.ok && !finalSummary.trim()) return result(false, "", "Agent produced no assistant summary");
+          if (!status.ok && (typeof status.error !== "string" || !status.error.trim())) {
+            return result(false, finalSummary, "Detached Pi child published malformed settled status", status.cancelled === true);
+          }
           return result(
             status.ok,
-            truncateUtf8(status.finalSummary),
+            finalSummary,
             typeof status.error === "string" ? status.error : undefined,
             status.cancelled === true,
           );
@@ -331,9 +328,7 @@ async function runZmx(options: RunAgentOptions, zmxPath: string): Promise<RunAge
         if (status.at !== lastStatusAt) {
           lastStatusAt = status.at;
           const activity = typeof status.activity === "string" ? truncateUtf8(status.activity, 240) : "Working";
-          options.record.activity = activity;
-          options.record.sidebarActivity = activity;
-          options.onProgress();
+          reportActivity(options, activity);
         }
       }
       if (!observedStatus && Date.now() - startedAt > ZMX_START_TIMEOUT_MS) {

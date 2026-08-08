@@ -4,7 +4,6 @@ import {
   atomicWriteJson,
   childArtifactPaths,
   delay,
-  lastAssistantSummary,
   permissionResponsePath,
   readJson,
   writePermissionRequest,
@@ -13,6 +12,8 @@ import {
   type ChildSettledStatus,
   type PermissionResponse,
 } from "./protocol.ts";
+import { classifyAssistantSettlement } from "./settlement.ts";
+import type { ClassifyAssistantSettlementResult } from "./types.ts";
 import { usageFromSessionEntries } from "./usage.ts";
 
 const CONFIG_ENV = "PI_DYNAMIC_WORKFLOW_CHILD_CONFIG";
@@ -23,30 +24,6 @@ function messagesFromEntries(entries: readonly unknown[]): unknown[] {
     const entry = raw as { type?: string; message?: unknown };
     return entry.type === "message" && entry.message ? [entry.message] : [];
   });
-}
-
-function lastAssistantWasAborted(messages: readonly unknown[]): boolean {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const raw = messages[index];
-    if (!raw || typeof raw !== "object") continue;
-    const message = raw as { role?: string; stopReason?: string };
-    if (message.role === "assistant") return message.stopReason === "aborted";
-  }
-  return false;
-}
-
-function lastAssistantError(messages: readonly unknown[]): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const raw = messages[index];
-    if (!raw || typeof raw !== "object") continue;
-    const message = raw as { role?: string; stopReason?: string; errorMessage?: string };
-    if (message.role !== "assistant") continue;
-    if (message.stopReason === "error" || message.stopReason === "aborted") {
-      return message.errorMessage ?? (message.stopReason === "aborted" ? "Agent interrupted" : "Agent failed");
-    }
-    return undefined;
-  }
-  return "Agent produced no assistant summary";
 }
 
 async function awaitPermissionResponse(config: ChildConfig, command: string, signal?: AbortSignal): Promise<PermissionResponse> {
@@ -135,19 +112,15 @@ export default function childHost(pi: ExtensionAPI) {
     currentContext = ctx;
     const entries = ctx.sessionManager.getEntries();
     const messages = messagesFromEntries(entries);
-    const error = lastAssistantError(messages);
-    const cancelled = lastAssistantWasAborted(messages);
+    const settlement: ClassifyAssistantSettlementResult = classifyAssistantSettlement(messages);
     const status: ChildSettledStatus = {
       version: CHILD_PROTOCOL_VERSION,
       state: "settled",
       at: Date.now(),
-      ok: !error,
-      finalSummary: lastAssistantSummary(messages),
+      ...settlement,
       usage: usageFromSessionEntries(entries),
       sessionId: ctx.sessionManager.getSessionId(),
       ...(ctx.sessionManager.getSessionFile() ? { sessionFile: ctx.sessionManager.getSessionFile()! } : {}),
-      ...(error ? { error } : {}),
-      ...(cancelled ? { cancelled: true } : {}),
     };
     // This first settled status is the parent's completion boundary. Pi remains
     // idle and attachable in zmx until the user explicitly terminates it.

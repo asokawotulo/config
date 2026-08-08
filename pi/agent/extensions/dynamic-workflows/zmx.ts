@@ -7,7 +7,6 @@ import { promisify } from "node:util";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import type { ResolvedAgentDefinition } from "./types.ts";
-import type { ChildArtifactPaths } from "./protocol.ts";
 
 const execFileAsync = promisify(execFile);
 export const SUPACODE_BUNDLED_ZMX = "/Applications/supacode.app/Contents/Resources/zmx/zmx";
@@ -105,10 +104,6 @@ export async function startZmxChild(options: StartZmxChildOptions): Promise<void
     const stderr = error && typeof error === "object" && "stderr" in error ? String(error.stderr).trim() : "";
     throw new Error(`Unable to start detached zmx child${stderr ? `: ${stderr}` : `: ${error instanceof Error ? error.message : String(error)}`}`);
   }
-}
-
-export function childArtifactReference(paths: ChildArtifactPaths): string {
-  return paths.directory;
 }
 
 /** Stop Pi's renderer while zmx owns the terminal, then restore it on detach. */

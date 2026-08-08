@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import type { RoleDefinition } from "./types.ts";
+import type { LoadedRoles, RoleDefinition, RoleLoadDiagnostic } from "./types.ts";
 
 function stringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim())) {
@@ -37,14 +37,24 @@ export function parseRoleFile(filePath: string): RoleDefinition {
   };
 }
 
-export function loadRoles(agentDir = getAgentDir()): Map<string, RoleDefinition> {
+export function loadRoles(agentDir = getAgentDir()): LoadedRoles {
   const directory = join(agentDir, "roles");
   const roles = new Map<string, RoleDefinition>();
-  if (!existsSync(directory)) return roles;
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+  const diagnostics: RoleLoadDiagnostic[] = [];
+  if (!existsSync(directory)) return { roles, diagnostics };
+  for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
     if (!entry.isFile() || extname(entry.name) !== ".md") continue;
-    const role = parseRoleFile(join(directory, entry.name));
-    roles.set(role.name, role);
+    const filePath = join(directory, entry.name);
+    try {
+      const role = parseRoleFile(filePath);
+      roles.set(role.name, role);
+    } catch (error) {
+      diagnostics.push({
+        name: basename(entry.name, extname(entry.name)),
+        filePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
-  return roles;
+  return { roles, diagnostics };
 }

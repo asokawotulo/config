@@ -23,10 +23,12 @@ import {
   WorkflowDialogComponent,
   type WorkflowReviewResult,
 } from "./form/dialog.ts";
+import { parentResultText } from "./output.ts";
 import { PermissionApprovalQueue } from "./permissions.ts";
+import { CoalescedProgress } from "./progress.ts";
 import { loadRoles } from "./roles.ts";
 import { aggregateAgentUsage, controlRunningAgent, runAgent } from "./runner.ts";
-import { childArtifactPaths, truncateUtf8, workflowArtifactDirectory, writeChildControl } from "./protocol.ts";
+import { childArtifactPaths, workflowArtifactDirectory, writeChildControl } from "./protocol.ts";
 import { attachZmxSession, killZmxSession, resolveZmxExecutable } from "./zmx.ts";
 import { formatRun, loadRuns, saveRun, toRunSnapshot, toRunSnapshots } from "./store.ts";
 import type { AgentRunRecord, ResolvedWorkflow, WorkflowRun } from "./types.ts";
@@ -50,15 +52,15 @@ function validateResources(plan: ResolvedWorkflow, pi: ExtensionAPI, ctx: Extens
 
 async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): Promise<WorkflowReviewResult> {
   if (ctx.mode !== "tui") throw new Error("Dynamic workflows require interactive TUI mode for confirmation");
-  const roles = loadRoles();
+  const loadedRoles = loadRoles();
   const result = await showDialog<WorkflowReviewResult | undefined>(pi, ctx, (tui, theme, _keybindings, done) =>
     new WorkflowDialogComponent({
       tui,
       theme,
       source,
-      roles,
+      roles: loadedRoles.roles,
       resolveSource: (canonicalSource) => {
-        const plan = resolveWorkflow(canonicalSource, roles, ctx.cwd);
+        const plan = resolveWorkflow(canonicalSource, loadedRoles.roles, ctx.cwd, loadedRoles.diagnostics);
         validateResources(plan, pi, ctx);
         return plan;
       },
@@ -79,7 +81,7 @@ async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): 
   return result ?? { action: "cancel" };
 }
 
-async function mapLimit<T>(
+export async function mapLimit<T>(
   items: T[],
   limit: number,
   operation: (item: T) => Promise<void>,
@@ -96,16 +98,6 @@ async function mapLimit<T>(
   await Promise.all(workers);
 }
 
-function parentResultText(run: WorkflowRun): string {
-  const lines: string[] = [];
-  for (const agent of run.agents) {
-    const summary = agent.finalSummary ?? agent.output;
-    const body = summary || (agent.error ? `Error: ${agent.error}` : "No final summary was produced.");
-    lines.push(`## ${agent.id} [${agent.status}]\n\n${body}`);
-  }
-  return truncateUtf8(lines.join("\n\n"), 50 * 1024);
-}
-
 function parentResultDetails(run: WorkflowRun) {
   return {
     runId: run.runId,
@@ -120,8 +112,36 @@ function parentResultDetails(run: WorkflowRun) {
   };
 }
 
+export function cancelUnfinishedAgents(run: WorkflowRun, finishedAt = Date.now()): void {
+  for (const agent of run.agents) {
+    if (agent.status !== "queued" && agent.status !== "running") continue;
+    agent.status = "cancelled";
+    agent.error = agent.startedAt
+      ? "Workflow cancelled while agent was running"
+      : "Workflow cancelled before agent launch";
+    agent.finishedAt = finishedAt;
+  }
+}
+
+type ActiveRun = { run: WorkflowRun; abort: AbortController; closeProgress?: () => void };
+
+export function finalizeRunForShutdown(
+  activeRun: ActiveRun,
+  persist: (run: WorkflowRun) => void,
+  publish: (run: WorkflowRun) => void,
+  finishedAt = Date.now(),
+): void {
+  activeRun.closeProgress?.();
+  activeRun.abort.abort(new Error("Session is shutting down"));
+  activeRun.run.status = "cancelled";
+  cancelUnfinishedAgents(activeRun.run, finishedAt);
+  activeRun.run.finishedAt = finishedAt;
+  persist(activeRun.run);
+  publish(activeRun.run);
+}
+
 export default function dynamicWorkflows(pi: ExtensionAPI) {
-  const active = new Map<string, { run: WorkflowRun; abort: AbortController }>();
+  const active = new Map<string, ActiveRun>();
   let currentSessionId: string | undefined;
   let lastUi: ExtensionContext["ui"] | undefined;
   let attachingAgent = false;
@@ -218,12 +238,8 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
     publishState(currentSessionId);
   });
   pi.on("session_shutdown", async () => {
-    for (const { run, abort } of active.values()) {
-      abort.abort(new Error("Session is shutting down"));
-      run.status = "cancelled";
-      run.finishedAt = Date.now();
-      saveRun(run);
-      publishRun(run, "settled");
+    for (const activeRun of active.values()) {
+      finalizeRunForShutdown(activeRun, saveRun, (run) => publishRun(run, "settled"));
     }
     active.clear();
     updateStatus();
@@ -321,14 +337,9 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
       const abort = new AbortController();
       const onAbort = () => abort.abort(signal?.reason);
       if (signal?.aborted) onAbort(); else signal?.addEventListener("abort", onAbort, { once: true });
-      active.set(runId, { run, abort });
-      if (ctx.hasUI) lastUi = ctx.ui;
-      updateStatus();
-      saveRun(run);
-      publishRun(run, "started");
       const approvalQueue = new PermissionApprovalQueue();
       const outputs = new Map<string, string>();
-      const emit = () => {
+      const commitProgress = () => {
         saveRun(run);
         publishRun(run, "progress");
         onUpdate?.({
@@ -336,6 +347,12 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
           details: parentResultDetails(run),
         });
       };
+      const progress = new CoalescedProgress(commitProgress);
+      active.set(runId, { run, abort, closeProgress: () => progress.dispose() });
+      if (ctx.hasUI) lastUi = ctx.ui;
+      updateStatus();
+      saveRun(run);
+      publishRun(run, "started");
 
       try {
         for (const wave of plan.waves) {
@@ -348,7 +365,7 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
               record.status = "skipped";
               record.error = `Dependency ${failedDependency} did not complete`;
               record.finishedAt = Date.now();
-              emit();
+              progress.immediate();
               return;
             }
             let expandedPrompt: string;
@@ -358,14 +375,14 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
               record.status = "failed";
               record.error = error instanceof Error ? error.message : String(error);
               record.finishedAt = Date.now();
-              emit();
+              progress.immediate();
               return;
             }
             record.status = "running";
             record.startedAt = Date.now();
             record.activity = "Starting Pi session";
             record.sidebarActivity = "Starting Pi session";
-            emit();
+            progress.immediate();
             const result = await runAgent({
               runId,
               agent,
@@ -376,9 +393,10 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
               approvalQueue,
               signal: abort.signal,
               record,
-              onPermission: (decision) => { run.permissionDecisions.push(decision); emit(); },
-              onProgress: emit,
+              onPermission: (decision) => { run.permissionDecisions.push(decision); progress.immediate(); },
+              onProgress: () => progress.transient(),
             });
+            if (active.get(runId)?.run !== run) return;
             record.finishedAt = Date.now();
             record.finalSummary = result.finalSummary;
             if (result.ok) {
@@ -388,7 +406,7 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
               record.status = abort.signal.aborted || result.cancelled ? "cancelled" : "failed";
               record.error = result.error ?? "Agent failed";
             }
-            emit();
+            progress.immediate();
           }, abort.signal);
         }
         run.status = abort.signal.aborted ? "cancelled" : run.agents.some((agent) => agent.status === "failed" || agent.status === "skipped") ? "failed" : "completed";
@@ -397,19 +415,24 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
         run.error = error instanceof Error ? error.message : String(error);
       } finally {
         signal?.removeEventListener("abort", onAbort);
-        if (abort.signal.aborted) {
-          for (const agent of run.agents) {
-            if (agent.status !== "queued") continue;
-            agent.status = "cancelled";
-            agent.error = "Workflow cancelled before agent launch";
-            agent.finishedAt = Date.now();
+        progress.dispose();
+        if (active.get(runId)?.run === run) {
+          if (abort.signal.aborted) {
+            cancelUnfinishedAgents(run);
+          } else {
+            for (const agent of run.agents) {
+              if (agent.status !== "queued" && agent.status !== "running") continue;
+              agent.status = agent.status === "queued" ? "skipped" : "failed";
+              agent.error = run.error ?? "Workflow stopped before the agent settled";
+              agent.finishedAt = Date.now();
+            }
           }
+          run.finishedAt = Date.now();
+          saveRun(run);
+          publishRun(run, "settled");
+          active.delete(runId);
+          updateStatus();
         }
-        run.finishedAt = Date.now();
-        saveRun(run);
-        publishRun(run, "settled");
-        active.delete(runId);
-        updateStatus();
       }
       return {
         content: [{ type: "text", text: parentResultText(run) }],

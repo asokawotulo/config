@@ -15,6 +15,25 @@ export interface RoleDefinition {
   filePath: string;
 }
 
+export interface RoleLoadDiagnostic {
+  name: string;
+  filePath: string;
+  error: string;
+}
+
+export interface LoadedRoles {
+  roles: Map<string, RoleDefinition>;
+  diagnostics: RoleLoadDiagnostic[];
+}
+
+/** Shared interpretation of the final assistant message for either backend. */
+export interface ClassifyAssistantSettlementResult {
+  ok: boolean;
+  finalSummary: string;
+  error?: string;
+  cancelled?: boolean;
+}
+
 export interface WorkflowAgentDefinition {
   id: string;
   role: string;

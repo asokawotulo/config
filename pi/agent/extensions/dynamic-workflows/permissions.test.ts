@@ -83,6 +83,24 @@ describe("dynamic workflow permissions", () => {
     expect(decisions[0]).toMatchObject({ action: "allow", command: "git status" });
   });
 
+  test.each([
+    [undefined, "Command edit cancelled"],
+    ["   ", "Command edit was blank"],
+  ] as const)("logs cancelled or blank command edits as denials", async (edited, reason) => {
+    const decisions: PermissionDecisionRecord[] = [];
+    const ctx = {
+      hasUI: true,
+      ui: {
+        select: async () => "Edit command",
+        editor: async () => edited,
+      },
+    } as unknown as ExtensionContext;
+
+    await expect(authorizeCommand(options("git reset --hard", ctx, decisions))).resolves.toEqual({ block: reason });
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]).toMatchObject({ action: "deny", command: "git reset --hard", reason });
+  });
+
   test("fails closed when Safety Net analysis fails", async () => {
     const decisions: PermissionDecisionRecord[] = [];
     const ctx = { hasUI: false } as ExtensionContext;

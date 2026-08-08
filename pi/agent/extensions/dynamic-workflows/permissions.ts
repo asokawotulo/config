@@ -103,7 +103,11 @@ export async function authorizeCommand(options: AuthorizeCommandOptions): Promis
     const decision = await promptDecision(options, "CC Safety Net blocked this command", message);
     if (decision === "edit") {
       const edited = await options.queue.run(() => options.ctx.ui.editor("Edit command (it will be re-analysed)", command));
-      if (edited === undefined || !edited.trim()) return { block: "Command edit cancelled" };
+      if (edited === undefined || !edited.trim()) {
+        const editReason = edited === undefined ? "Command edit cancelled" : "Command edit was blank";
+        log(options, command, { source: "cc-safety-net", action: "deny", reason: editReason });
+        return { block: editReason };
+      }
       command = edited.trim();
       continue;
     }

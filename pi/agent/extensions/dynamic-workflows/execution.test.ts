@@ -4,11 +4,13 @@ import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import childHost from "./child-host.ts";
+import { finalizeRunForShutdown, mapLimit } from "./index.ts";
+import { MAX_PARENT_RESULT_BYTES, parentResultText } from "./output.ts";
+import { CoalescedProgress, type ProgressTimers } from "./progress.ts";
 import {
   atomicWriteJson,
   childArtifactPaths,
   initializeChildArtifacts,
-  lastAssistantSummary,
   listPermissionRequests,
   permissionResponsePath,
   readJson,
@@ -16,8 +18,9 @@ import {
   writePermissionRequest,
   type PermissionResponse,
 } from "./protocol.ts";
-import { aggregateAgentUsage } from "./runner.ts";
-import type { ResolvedAgentDefinition, RoleDefinition } from "./types.ts";
+import { aggregateAgentUsage, updateAgentActivity } from "./runner.ts";
+import { classifyAssistantSettlement } from "./settlement.ts";
+import type { AgentRunRecord, ResolvedAgentDefinition, RoleDefinition, WorkflowRun } from "./types.ts";
 import { usageFromSessionEntries } from "./usage.ts";
 import {
   attachZmxSession,
@@ -74,16 +77,144 @@ describe("dynamic workflow execution protocol", () => {
     expect(readJson<PermissionResponse>(permissionResponsePath(paths, request.id))).toEqual(response);
   });
 
-  test("keeps only the bounded last non-empty assistant summary", () => {
-    const summary = lastAssistantSummary([
-      { role: "assistant", content: [{ type: "text", text: "earlier conversation" }] },
-      { role: "toolResult", content: [{ type: "text", text: "secret tool output" }] },
+  test("classifies successful, blank, missing, errored, and cancelled assistant settlement uniformly", () => {
+    expect(classifyAssistantSettlement([
+      { role: "assistant", content: [{ type: "text", text: "done" }] },
+      { role: "toolResult", content: [{ type: "text", text: "ignored" }] },
+    ])).toEqual({ ok: true, finalSummary: "done" });
+    expect(classifyAssistantSettlement([
+      { role: "assistant", content: [{ type: "text", text: "earlier" }] },
+      { role: "assistant", content: [{ type: "text", text: "  " }] },
+    ])).toMatchObject({ ok: false, finalSummary: "", error: "Agent produced no assistant summary" });
+    expect(classifyAssistantSettlement([])).toMatchObject({ ok: false, error: "Agent produced no assistant response" });
+    expect(classifyAssistantSettlement([
+      { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "error", errorMessage: "bad" },
+    ])).toEqual({ ok: false, finalSummary: "partial", error: "bad" });
+    expect(classifyAssistantSettlement([
+      { role: "assistant", content: [{ type: "text", text: "partial" }], stopReason: "aborted" },
+    ])).toEqual({ ok: false, finalSummary: "partial", error: "Agent interrupted", cancelled: true });
+    const bounded = classifyAssistantSettlement([
       { role: "assistant", content: [{ type: "text", text: "x".repeat(40_000) }] },
     ]);
-    expect(summary).not.toContain("earlier conversation");
-    expect(summary).not.toContain("secret tool output");
-    expect(Buffer.byteLength(summary, "utf8")).toBeLessThanOrEqual(32 * 1024);
-    expect(summary).toEndWith("[summary truncated]");
+    expect(Buffer.byteLength(bounded.finalSummary, "utf8")).toBeLessThanOrEqual(32 * 1024);
+    expect(bounded.finalSummary).toEndWith("[summary truncated]");
+  });
+
+  test("deduplicates activity and coalesces transient progress around immediate transitions", () => {
+    const record: AgentRunRecord = {
+      id: "reader", role: "reader", prompt: "inspect", status: "running",
+      model: "provider/model", tools: [], skills: [],
+    };
+    expect(updateAgentActivity(record, "Writing response")).toBe(true);
+    expect(updateAgentActivity(record, "Writing response")).toBe(false);
+
+    let commits = 0;
+    let nextHandle = 0;
+    const scheduled = new Map<number, () => void>();
+    const timers: ProgressTimers = {
+      set(callback) { const handle = ++nextHandle; scheduled.set(handle, callback); return handle; },
+      clear(handle) { scheduled.delete(handle as number); },
+    };
+    const progress = new CoalescedProgress(() => commits++, 100, timers);
+    progress.transient();
+    progress.transient();
+    progress.transient();
+    expect(scheduled.size).toBe(1);
+    const [handle, callback] = scheduled.entries().next().value!;
+    scheduled.delete(handle);
+    callback();
+    expect(commits).toBe(1);
+    progress.transient();
+    progress.immediate();
+    expect(commits).toBe(2);
+    expect(scheduled.size).toBe(0);
+    progress.transient();
+    progress.cancel();
+    expect(scheduled.size).toBe(0);
+    expect(commits).toBe(2);
+  });
+
+  test("closes progress permanently and persists immediately cancelled terminal state on shutdown", () => {
+    const callbacks: Array<() => void> = [];
+    const timers: ProgressTimers = {
+      set(callback) { callbacks.push(callback); return callbacks.length; },
+      clear() {},
+    };
+    let progressCommits = 0;
+    const progress = new CoalescedProgress(() => progressCommits++, 100, timers);
+    const run: WorkflowRun = {
+      runId: "wf_shutdown", sessionId: "session", name: "shutdown", cwd: "/project", status: "running",
+      approvedSource: "source", waves: [], permissionDecisions: [], startedAt: 1,
+      agents: [
+        { id: "queued", role: "reader", prompt: "inspect", status: "queued", model: "p/m", tools: [], skills: [] },
+        { id: "running", role: "reader", prompt: "inspect", status: "running", model: "p/m", tools: [], skills: [], startedAt: 2 },
+      ],
+    };
+
+    const abort = new AbortController();
+    abort.signal.addEventListener("abort", () => {
+      progress.immediate();
+      progress.transient();
+    });
+    const persisted: WorkflowRun[] = [];
+    const published: WorkflowRun[] = [];
+
+    progress.transient();
+    finalizeRunForShutdown(
+      { run, abort, closeProgress: () => progress.dispose() },
+      (value) => persisted.push(structuredClone(value)),
+      (value) => published.push(structuredClone(value)),
+      3,
+    );
+    progress.immediate();
+    progress.transient();
+    callbacks[0]!();
+
+    expect(progressCommits).toBe(0);
+    expect(persisted).toHaveLength(1);
+    expect(published).toEqual(persisted);
+    expect(persisted[0]?.status).toBe("cancelled");
+    expect(persisted[0]?.finishedAt).toBe(3);
+    expect(persisted[0]?.agents.map((record) => record.status)).toEqual(["cancelled", "cancelled"]);
+    expect(persisted[0]?.agents.map((record) => record.finishedAt)).toEqual([3, 3]);
+  });
+
+  test("formats multi-byte summaries fairly at the exact parent byte limit", () => {
+    const run: WorkflowRun = {
+      runId: "wf_output", sessionId: "session", name: "output", cwd: "/project", status: "completed",
+      approvedSource: "source", waves: [], permissionDecisions: [], startedAt: 1,
+      agents: Array.from({ length: 32 }, (_, index) => ({
+        id: `agent-${index}`, role: "reader", prompt: "inspect", status: "completed" as const,
+        model: "provider/model", tools: [], skills: [], finalSummary: `body-${index}:🙂漢字\n` + "x".repeat(20_000),
+      })),
+    };
+    const output = parentResultText(run);
+    expect(Buffer.byteLength(output, "utf8")).toBe(MAX_PARENT_RESULT_BYTES);
+    expect(Buffer.from(output, "utf8").toString("utf8")).toBe(output);
+    expect(output).not.toContain("\uFFFD");
+
+    const sections = output.split(/\n\n(?=## agent-\d+ \[completed\]\n\n)/);
+    const bodySizes = sections.map((section) => Buffer.byteLength(section.replace(/^## agent-\d+ \[completed\]\n\n/, ""), "utf8"));
+    expect(Math.max(...bodySizes) - Math.min(...bodySizes)).toBeLessThanOrEqual(1);
+    for (let index = 0; index < run.agents.length; index++) {
+      expect(output).toContain(`## agent-${index} [completed]`);
+      expect(output).toContain(`body-${index}:🙂漢字`);
+    }
+  });
+
+  test("runs bounded orchestration without a model or zmx process", async () => {
+    let active = 0;
+    let maximum = 0;
+    const visited: number[] = [];
+    await mapLimit([0, 1, 2, 3, 4], 2, async (value) => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await new Promise((resolve) => setTimeout(resolve, value % 2));
+      visited.push(value);
+      active--;
+    });
+    expect(maximum).toBe(2);
+    expect(visited.sort((left, right) => left - right)).toEqual([0, 1, 2, 3, 4]);
   });
 
   test("aggregates complete assistant and nested tool usage", () => {
