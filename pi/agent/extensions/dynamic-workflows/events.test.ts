@@ -6,8 +6,13 @@ import {
   MAX_DYNAMIC_WORKFLOW_AGENTS,
   MAX_DYNAMIC_WORKFLOW_COST,
   MAX_DYNAMIC_WORKFLOW_DETAIL_LENGTH,
+  MAX_DYNAMIC_WORKFLOW_LABEL_LENGTH,
   MAX_DYNAMIC_WORKFLOW_RUNS,
   dynamicWorkflowDisplayText,
+  parseDynamicWorkflowAgentSnapshot,
+  parseDynamicWorkflowRunEvent,
+  parseDynamicWorkflowRunSnapshot,
+  parseDynamicWorkflowStateEvent,
 } from "../../lib/dynamic-workflow-events.ts";
 import { formatRun, toRunSnapshot, toRunSnapshots } from "./store.ts";
 import type { WorkflowRun } from "./types.ts";
@@ -87,6 +92,59 @@ describe("dynamic workflow sidebar events", () => {
     expect(serialized).not.toContain("SECRET_PERMISSION");
     expect(serialized).not.toContain("SECRET_APPROVED_SOURCE");
     expect(serialized).not.toContain("/private/project");
+  });
+
+  test("parses snapshots and emitted run/state event contracts", () => {
+    const snapshot = toRunSnapshot(fixture());
+
+    expect(parseDynamicWorkflowAgentSnapshot(snapshot.agents[0])).toEqual(snapshot.agents[0]);
+    expect(parseDynamicWorkflowRunSnapshot(snapshot)).toEqual(snapshot);
+    expect(parseDynamicWorkflowRunEvent({
+      sessionId: snapshot.sessionId,
+      phase: "progress",
+      run: snapshot,
+    })).toEqual({ sessionId: snapshot.sessionId, phase: "progress", run: snapshot });
+    expect(parseDynamicWorkflowStateEvent({
+      sessionId: snapshot.sessionId,
+      runs: [snapshot],
+    })).toEqual({ sessionId: snapshot.sessionId, runs: [snapshot] });
+  });
+
+  test("rejects malformed, unbounded, and cross-session event data", () => {
+    const snapshot = toRunSnapshot(fixture());
+    const firstAgent = snapshot.agents[0]!;
+
+    expect(parseDynamicWorkflowAgentSnapshot({ ...firstAgent, status: "unknown" })).toBeUndefined();
+    expect(parseDynamicWorkflowAgentSnapshot({ ...firstAgent, cost: Number.NaN })).toBeUndefined();
+    expect(parseDynamicWorkflowAgentSnapshot({ ...firstAgent, extra: "private" })).toBeUndefined();
+    expect(parseDynamicWorkflowRunSnapshot({ ...snapshot, startedAt: Infinity })).toBeUndefined();
+    expect(parseDynamicWorkflowRunSnapshot({ ...snapshot, agentCount: snapshot.agents.length - 1 })).toBeUndefined();
+    expect(parseDynamicWorkflowRunSnapshot({
+      ...snapshot,
+      name: "x".repeat(MAX_DYNAMIC_WORKFLOW_LABEL_LENGTH + 1),
+    })).toBeUndefined();
+    expect(parseDynamicWorkflowRunSnapshot({
+      ...snapshot,
+      agents: [...snapshot.agents, firstAgent],
+    })).toBeUndefined();
+    expect(parseDynamicWorkflowRunEvent({
+      sessionId: snapshot.sessionId,
+      phase: "invalid",
+      run: snapshot,
+    })).toBeUndefined();
+    expect(parseDynamicWorkflowRunEvent({
+      sessionId: "another-session",
+      phase: "settled",
+      run: snapshot,
+    })).toBeUndefined();
+    expect(parseDynamicWorkflowStateEvent({
+      sessionId: snapshot.sessionId,
+      runs: Array.from({ length: MAX_DYNAMIC_WORKFLOW_RUNS + 1 }, () => snapshot),
+    })).toBeUndefined();
+    expect(parseDynamicWorkflowStateEvent({
+      sessionId: "another-session",
+      runs: [snapshot],
+    })).toBeUndefined();
   });
 
   test("formats final summaries and retains legacy output compatibility", () => {
