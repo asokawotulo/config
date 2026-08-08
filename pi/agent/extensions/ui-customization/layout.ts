@@ -1,230 +1,319 @@
-import type { Component, TUI } from "@earendil-works/pi-tui";
-import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import type { DynamicWorkflowAgentTarget } from "../../lib/dynamic-workflow-events.ts";
-import { ChatScrollState } from "./scroll-state.ts";
+import { VERSION } from "@earendil-works/pi-coding-agent";
+import {
+  HStack,
+  isViewportTUI,
+  ScrollView,
+  VStack,
+  type Component,
+  type TUI,
+  type ViewportTUI,
+} from "@earendil-works/pi-tui";
+import { SIDEBAR_WIDTH } from "./sidebar.ts";
 
-export const PI_083_ROOT_CHILD_COUNT = 9;
-export const SIDEBAR_WIDTH = 30;
+export const SUPPORTED_PI_VERSION = "0.84.0";
+export const SUPPORTED_PI_VERSIONS = new Set(["0.84.0", "0.84.1"]);
 export const SIDEBAR_MIN_TERMINAL_WIDTH = 100;
 
-export interface Pi083Root {
-  history: Component[];
-  fixed: Component[];
-  footer: Component;
+interface RuntimeStackEntry {
+  component: Component;
+  basis?: number | "auto";
+  grow?: number;
+  shrink?: number;
+  minSize?: number;
+  maxSize?: number;
+  visible?: (viewport: { width: number; height: number }) => boolean;
 }
 
-export interface SidebarRenderer {
-  render(width: number, height: number): string[];
-  invalidate(): void;
-  /** Zero-based row lookup retained from the latest sidebar render. */
-  hitTestAgent?(row: number): DynamicWorkflowAgentTarget | undefined;
+interface RuntimeStack extends Component {
+  children: Component[];
+  entries: RuntimeStackEntry[];
+  gap: number;
+  align: "stretch" | "start" | "center" | "end";
 }
 
-export interface TuiWithMutableRender extends TUI {
-  render(width: number): string[];
+interface RuntimeFullscreenTui extends ViewportTUI {
+  layoutRoot?: Component;
 }
 
-export function resolvePi083Root(tui: TUI): Pi083Root | undefined {
-  if (tui.children.length !== PI_083_ROOT_CHILD_COUNT) return undefined;
-  if (!tui.children.every(isComponent)) return undefined;
+export interface Pi0840FullscreenLayout {
+  tui: RuntimeFullscreenTui;
+  root: RuntimeStack;
+  transcript: ScrollView;
+  dock: RuntimeStack;
+}
 
-  const [
-    header,
-    resources,
-    chat,
-    pending,
-    status,
-    aboveEditor,
-    editor,
-    belowEditor,
-    footer,
-  ] = tui.children;
+type InstallResult = "installed" | "waiting" | "incompatible";
 
-  if (
-    !header ||
-    !resources ||
-    !chat ||
-    !pending ||
-    !status ||
-    !aboveEditor ||
-    !editor ||
-    !belowEditor ||
-    !footer
-  ) {
-    return undefined;
-  }
-
-  return {
-    history: [header, resources, chat],
-    fixed: [pending, status, aboveEditor, editor, belowEditor],
-    footer,
-  };
+function runtimeStack(component: Component): RuntimeStack {
+  return component as RuntimeStack;
 }
 
 function isComponent(value: unknown): value is Component {
   return (
+    !!value &&
     typeof value === "object" &&
-    value !== null &&
-    "render" in value &&
-    typeof value.render === "function" &&
-    "invalidate" in value &&
-    typeof value.invalidate === "function"
+    typeof (value as Component).render === "function" &&
+    typeof (value as Component).invalidate === "function"
   );
 }
 
-export class PatchedLayout {
-  private lastSidebarVisible = false;
-  private lastWidth = 0;
-  private lastHeight = 0;
-  private historyCache:
-    | { width: number; lines: readonly string[] }
-    | undefined;
-  private idleScrollRequested = false;
-  private agentActive = false;
+function hasExactEntry(
+  entry: RuntimeStackEntry | undefined,
+  component: Component,
+  options: Omit<RuntimeStackEntry, "component">,
+): boolean {
+  if (!entry || entry.component !== component) return false;
+  const expected = { component, ...options };
+  const actualKeys = Object.keys(entry).sort();
+  const expectedKeys = Object.keys(expected).sort();
+  return (
+    actualKeys.length === expectedKeys.length &&
+    actualKeys.every(
+      (key, index) =>
+        key === expectedKeys[index] &&
+        entry[key as keyof RuntimeStackEntry] ===
+          expected[key as keyof typeof expected],
+    )
+  );
+}
 
-  constructor(
-    private readonly tui: TUI,
-    private readonly root: Pi083Root,
-    readonly scroll: ChatScrollState,
-    private readonly sidebar: SidebarRenderer,
-  ) {}
+function hasSynchronizedEntries(stack: RuntimeStack, count: number): boolean {
+  return (
+    stack.children.length === count &&
+    stack.entries.length === count &&
+    stack.entries.every(
+      (entry, index) => entry.component === stack.children[index],
+    )
+  );
+}
 
-  /** Allow exactly the next render to reuse complete history for an idle scroll. */
-  requestIdleScrollRender(idle: boolean): void {
-    this.idleScrollRequested =
-      idle && !this.agentActive && this.historyCache !== undefined;
+/** Version-pinned validation of Pi 0.84.0's private fullscreen layout tree. */
+export function resolvePi0840FullscreenLayout(
+  tui: TUI,
+  version = VERSION,
+): Pi0840FullscreenLayout | undefined {
+  if (
+    !SUPPORTED_PI_VERSIONS.has(version) ||
+    tui.mode !== "fullscreen" ||
+    !isViewportTUI(tui)
+  ) {
+    return undefined;
   }
 
-  setAgentActive(active: boolean): void {
-    if (active === this.agentActive) return;
-    this.agentActive = active;
-    this.invalidateHistory();
+  const fullscreenTui = tui as RuntimeFullscreenTui;
+  const rootComponent = fullscreenTui.layoutRoot;
+  if (!(rootComponent instanceof VStack)) return undefined;
+  const root = runtimeStack(rootComponent);
+  if (
+    root.gap !== 0 ||
+    root.align !== "stretch" ||
+    !hasSynchronizedEntries(root, 2)
+  ) {
+    return undefined;
   }
 
-  invalidateHistory(): void {
-    this.historyCache = undefined;
-    this.idleScrollRequested = false;
+  const transcript = root.children[0];
+  const dockComponent = root.children[1];
+  if (
+    !(transcript instanceof ScrollView) ||
+    !(dockComponent instanceof VStack)
+  ) {
+    return undefined;
+  }
+  const dock = runtimeStack(dockComponent);
+  if (
+    transcript.primary !== true ||
+    transcript.overscroll !== "chain" ||
+    root.entries[0]?.component !== transcript ||
+    root.entries[1]?.component !== dockComponent ||
+    !hasExactEntry(root.entries[0], transcript, {
+      basis: 0,
+      grow: 1,
+      shrink: 1,
+      minSize: 1,
+    }) ||
+    !hasExactEntry(root.entries[1], dockComponent, {
+      basis: "auto",
+      grow: 0,
+      shrink: 1,
+      minSize: 1,
+    }) ||
+    dock.gap !== 0 ||
+    dock.align !== "stretch" ||
+    !hasSynchronizedEntries(dock, 6) ||
+    tui.children.length !== 7 ||
+    !tui.children.every(isComponent) ||
+    transcript.children.length !== 1 ||
+    transcript.children[0] !== tui.children[0]
+  ) {
+    return undefined;
   }
 
-  invalidateSidebar(): void {
-    this.sidebar.invalidate();
-  }
-
-  invalidateAll(): void {
-    this.invalidateHistory();
-    this.invalidateSidebar();
-  }
-
-  render(width: number): string[] {
-    const height = Math.max(1, this.tui.terminal.rows);
-    const sidebarVisible = width >= SIDEBAR_MIN_TERMINAL_WIDTH;
-    const resized =
-      this.lastWidth !== 0 &&
-      (width !== this.lastWidth || height !== this.lastHeight);
-    let useIdleHistory = this.idleScrollRequested && !resized;
-    this.idleScrollRequested = false;
-
-    if (resized) {
-      this.invalidateAll();
-      useIdleHistory = false;
-    }
-
-    this.lastWidth = width;
-    this.lastHeight = height;
-    const leftWidth = sidebarVisible
-      ? Math.max(1, width - SIDEBAR_WIDTH)
-      : width;
-
-    if (sidebarVisible !== this.lastSidebarVisible) {
-      this.lastSidebarVisible = sidebarVisible;
-      this.scroll.followingBottom = true;
-    }
-
-    const fixedComponents = sidebarVisible
-      ? this.root.fixed
-      : [...this.root.fixed, this.root.footer];
-    let fixedLines = renderComponents(fixedComponents, leftWidth);
-    if (fixedLines.length > height) {
-      fixedLines = fixedLines.slice(-height);
-    }
-
-    const viewportHeight = Math.max(0, height - fixedLines.length);
-    const cachedHistory = this.historyCache;
-    let reusedHistory = false;
-    let historyLines: readonly string[];
-    if (useIdleHistory && cachedHistory?.width === leftWidth) {
-      historyLines = cachedHistory.lines;
-      reusedHistory = true;
-    } else {
-      historyLines = renderComponents(this.root.history, leftWidth);
-    }
-    if (!reusedHistory && !this.agentActive) {
-      this.historyCache = { width: leftWidth, lines: historyLines };
-    }
-    this.scroll.reconcile(historyLines.length, viewportHeight);
-
-    const visibleHistory =
-      viewportHeight === 0
-        ? []
-        : historyLines.slice(
-            this.scroll.scrollTop,
-            this.scroll.scrollTop + viewportHeight,
-          );
-    const historyPadding = Array.from(
-      { length: Math.max(0, viewportHeight - visibleHistory.length) },
-      () => "",
-    );
-    const leftLines = [...visibleHistory, ...historyPadding, ...fixedLines];
-
-    while (leftLines.length < height) leftLines.unshift("");
-    if (!sidebarVisible) {
-      return leftLines.map((line) => truncateToWidth(line, width, ""));
-    }
-
-    const sidebarLines = this.sidebar.render(SIDEBAR_WIDTH, height);
-    return composeColumns(leftLines, sidebarLines, leftWidth, SIDEBAR_WIDTH, height);
-  }
-
-  /** Hit-test one-based SGR terminal coordinates against the latest render. */
-  hitTestSidebar(
-    column: number,
-    row: number,
-  ): DynamicWorkflowAgentTarget | undefined {
+  const dockMinimums = [0, 0, 0, 3, 0, 1] as const;
+  for (let index = 0; index < dockMinimums.length; index += 1) {
+    const component = tui.children[index + 1];
     if (
-      !this.lastSidebarVisible ||
-      !Number.isInteger(column) ||
-      !Number.isInteger(row) ||
-      row < 1 ||
-      row > this.lastHeight
+      !component ||
+      dock.children[index] !== component ||
+      !hasExactEntry(dock.entries[index], component, {
+        shrink: 1,
+        minSize: dockMinimums[index],
+      })
     ) {
       return undefined;
     }
-    const sidebarStart = this.lastWidth - SIDEBAR_WIDTH + 1;
-    if (column < sidebarStart || column > this.lastWidth) return undefined;
-    return this.sidebar.hitTestAgent?.(row - 1);
   }
+
+  return { tui: fullscreenTui, root, transcript, dock };
 }
 
-export function renderComponents(
-  components: readonly Component[],
-  width: number,
-): string[] {
-  return components.flatMap((component) => component.render(width));
-}
+/**
+ * Guarded adapter for Pi 0.84.0's canonical fullscreen tree. It changes only
+ * the two root components and restores them only while it still owns both.
+ */
+export class Pi0840SidebarLayoutAdapter {
+  private layout: Pi0840FullscreenLayout | undefined;
+  private transcriptColumn: HStack | undefined;
+  private dockWithoutFooter: VStack | undefined;
+  private sidebarVisible = false;
+  private lastMeasuredRows: number | undefined;
+  private lastMeasuredColumns: number | undefined;
 
-export function composeColumns(
-  leftLines: readonly string[],
-  rightLines: readonly string[],
-  leftWidth: number,
-  rightWidth: number,
-  height: number,
-): string[] {
-  const lines: string[] = [];
-  for (let row = 0; row < height; row += 1) {
-    const left = truncateToWidth(leftLines[row] ?? "", leftWidth, "");
-    const paddedLeft = left + " ".repeat(Math.max(0, leftWidth - visibleWidth(left)));
-    const right = truncateToWidth(rightLines[row] ?? "", rightWidth, "");
-    lines.push(truncateToWidth(paddedLeft + right, leftWidth + rightWidth, ""));
+  constructor(
+    private readonly tui: TUI,
+    private readonly sidebar: Component,
+    private readonly version = VERSION,
+  ) {}
+
+  reconcile(): InstallResult {
+    if (!SUPPORTED_PI_VERSIONS.has(this.version)) return "incompatible";
+    if (this.tui.mode !== "fullscreen") return "waiting";
+
+    if (this.layout && this.transcriptColumn && this.dockWithoutFooter) {
+      const { root } = this.layout;
+      const ownsLayout =
+        root.entries[0]?.component === this.transcriptColumn &&
+        root.children[0] === this.transcriptColumn &&
+        root.entries[1]?.component === this.dockWithoutFooter &&
+        root.children[1] === this.dockWithoutFooter;
+      if (ownsLayout) return "installed";
+
+      const isCanonicalAgain =
+        root.entries[0]?.component === this.layout.transcript &&
+        root.children[0] === this.layout.transcript &&
+        root.entries[1]?.component === this.layout.dock &&
+        root.children[1] === this.layout.dock;
+      const activeRoot = (this.tui as RuntimeFullscreenTui).layoutRoot;
+      if (!isCanonicalAgain || activeRoot !== root) return "incompatible";
+      this.installOwnedComponents();
+      return "installed";
+    }
+
+    const layout = resolvePi0840FullscreenLayout(this.tui, this.version);
+    if (!layout) return "incompatible";
+    this.layout = layout;
+    this.transcriptColumn = new HStack([
+      {
+        component: layout.transcript,
+        basis: 0,
+        grow: 1,
+        shrink: 1,
+        minSize: 1,
+      },
+      {
+        component: this.sidebar,
+        basis: SIDEBAR_WIDTH,
+        grow: 0,
+        shrink: 0,
+        minSize: SIDEBAR_WIDTH,
+        maxSize: SIDEBAR_WIDTH,
+        visible: (viewport) =>
+          this.sidebarVisible && viewport.width >= SIDEBAR_MIN_TERMINAL_WIDTH,
+      },
+    ]);
+    this.dockWithoutFooter = new VStack(
+      layout.dock.entries.slice(0, 5).map((entry) => ({
+        component: entry.component,
+        ...(entry.basis === undefined ? {} : { basis: entry.basis }),
+        ...(entry.grow === undefined ? {} : { grow: entry.grow }),
+        ...(entry.shrink === undefined ? {} : { shrink: entry.shrink }),
+        ...(entry.minSize === undefined ? {} : { minSize: entry.minSize }),
+        ...(entry.maxSize === undefined ? {} : { maxSize: entry.maxSize }),
+        ...(entry.visible === undefined ? {} : { visible: entry.visible }),
+      })),
+      { gap: layout.dock.gap, align: layout.dock.align },
+    );
+    this.installOwnedComponents();
+    return "installed";
   }
-  return lines;
+
+  setSidebarVisible(visible: boolean): InstallResult {
+    this.sidebarVisible = visible;
+    const result = this.reconcile();
+    this.tui.requestRender();
+    return result;
+  }
+
+  isSidebarVisible(): boolean {
+    return this.sidebarVisible;
+  }
+
+  invalidateSidebar(): InstallResult {
+    this.sidebar.invalidate();
+    const result = this.reconcile();
+    this.tui.requestRender();
+    return result;
+  }
+
+  getTranscriptHeight(): number {
+    const rows = Math.max(1, this.tui.terminal.rows);
+    const columns = Math.max(1, this.tui.terminal.columns);
+    const layout = this.layout;
+    const dock = this.dockWithoutFooter;
+    if (!layout || !dock) return rows;
+
+    const unchangedDimensions =
+      rows === this.lastMeasuredRows && columns === this.lastMeasuredColumns;
+    this.lastMeasuredRows = rows;
+    this.lastMeasuredColumns = columns;
+
+    const dockNaturalHeight = Math.max(1, dock.render(columns).length);
+    const derivedHeight = Math.max(1, rows - dockNaturalHeight);
+    return unchangedDimensions &&
+      layout.transcript.viewportHeight === derivedHeight
+      ? layout.transcript.viewportHeight
+      : derivedHeight;
+  }
+
+  uninstall(): boolean {
+    const layout = this.layout;
+    const transcriptColumn = this.transcriptColumn;
+    const dockWithoutFooter = this.dockWithoutFooter;
+    if (!layout || !transcriptColumn || !dockWithoutFooter) return false;
+
+    const ownsBoth =
+      layout.root.entries[0]?.component === transcriptColumn &&
+      layout.root.children[0] === transcriptColumn &&
+      layout.root.entries[1]?.component === dockWithoutFooter &&
+      layout.root.children[1] === dockWithoutFooter;
+    if (!ownsBoth) return false;
+
+    layout.root.entries[0]!.component = layout.transcript;
+    layout.root.children[0] = layout.transcript;
+    layout.root.entries[1]!.component = layout.dock;
+    layout.root.children[1] = layout.dock;
+    this.tui.requestRender();
+    return true;
+  }
+
+  private installOwnedComponents(): void {
+    const layout = this.layout!;
+    layout.root.entries[0]!.component = this.transcriptColumn!;
+    layout.root.children[0] = this.transcriptColumn!;
+    layout.root.entries[1]!.component = this.dockWithoutFooter!;
+    layout.root.children[1] = this.dockWithoutFooter!;
+    this.lastMeasuredRows = undefined;
+    this.lastMeasuredColumns = undefined;
+    this.tui.requestRender();
+  }
 }

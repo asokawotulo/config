@@ -5,33 +5,24 @@ import type {
   Theme,
 } from "@earendil-works/pi-coding-agent";
 import {
-  Container,
+  ScrollView,
+  VStack,
   type Component,
-  type EditorTheme,
   type TUI,
 } from "@earendil-works/pi-tui";
-import uiCustomization, { observeInvalidation } from "./index.ts";
 import {
-  PatchedLayout,
-  SIDEBAR_MIN_TERMINAL_WIDTH,
-  type Pi083Root,
-} from "./layout.ts";
-import { ChatScrollState } from "./scroll-state.ts";
+  DYNAMIC_WORKFLOW_RUN_EVENT,
+  DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
+} from "../../lib/dynamic-workflow-events.ts";
+import uiCustomization from "./index.ts";
 
-type EditorFactory = NonNullable<
-  Parameters<ExtensionContext["ui"]["setEditorComponent"]>[0]
->;
+const VIEWPORT_TUI = Symbol.for("@earendil-works/pi-tui/viewport");
 
 class Lines implements Component {
-  renderCalls = 0;
-
-  constructor(readonly lines: string[]) {}
-
+  constructor(private readonly lines: string[]) {}
   render(): string[] {
-    this.renderCalls += 1;
     return this.lines;
   }
-
   invalidate(): void {}
 }
 
@@ -44,220 +35,279 @@ function identityTheme(): Theme {
   } as unknown as Theme;
 }
 
-describe("observeInvalidation", () => {
-  test("preserves mutation calls and restores only wrappers it still owns", () => {
-    const calls: Array<{
-      method: string;
-      receiver: unknown;
-      args: unknown[];
-    }> = [];
-    const probe = {
-      render: () => [],
-      invalidate(this: unknown, ...args: unknown[]) {
-        calls.push({ method: "invalidate", receiver: this, args });
-        return "invalidate-result";
-      },
-      addChild(this: unknown, ...args: unknown[]) {
-        calls.push({ method: "addChild", receiver: this, args });
-        return "add-result";
-      },
-      removeChild(this: unknown, ...args: unknown[]) {
-        calls.push({ method: "removeChild", receiver: this, args });
-        return "remove-result";
-      },
-      clear(this: unknown, ...args: unknown[]) {
-        calls.push({ method: "clear", receiver: this, args });
-        return "clear-result";
-      },
-    };
-    type Probe = typeof probe;
-    const originals = {
-      invalidate: probe.invalidate,
-      addChild: probe.addChild,
-      removeChild: probe.removeChild,
-      clear: probe.clear,
-    };
-    let invalidations = 0;
-    const cleanup = observeInvalidation(
-      [probe as unknown as Component],
-      () => invalidations += 1,
-    );
-    const receiver = { receiver: true };
-
-    expect(probe.invalidate.call(receiver, "theme")).toBe("invalidate-result");
-    expect(probe.addChild.call(receiver, "child", 1)).toBe("add-result");
-    expect(probe.removeChild.call(receiver, "child", 2)).toBe("remove-result");
-    expect(probe.clear.call(receiver, 3)).toBe("clear-result");
-    expect(invalidations).toBe(4);
-    expect(calls).toEqual([
-      { method: "invalidate", receiver, args: ["theme"] },
-      { method: "addChild", receiver, args: ["child", 1] },
-      { method: "removeChild", receiver, args: ["child", 2] },
-      { method: "clear", receiver, args: [3] },
-    ]);
-
-    const replacementClear: Probe["clear"] = function () {
-      return "replacement";
-    };
-    probe.clear = replacementClear;
-    cleanup();
-
-    expect(probe.invalidate).toBe(originals.invalidate);
-    expect(probe.addChild).toBe(originals.addChild);
-    expect(probe.removeChild).toBe(originals.removeChild);
-    expect(probe.clear).toBe(replacementClear);
+function makeFullscreenTui() {
+  const components: Component[] = [
+    new Lines(["transcript"]),
+    new Lines([]),
+    new Lines([]),
+    new Lines([]),
+    new Lines(["editor", "editor", "editor"]),
+    new Lines([]),
+    new Lines(["footer"]),
+  ];
+  const transcript = new ScrollView(components[0]!, {
+    follow: "end",
+    primary: true,
+    overscroll: "chain",
   });
+  const dock = new VStack([
+    { component: components[1]!, shrink: 1, minSize: 0 },
+    { component: components[2]!, shrink: 1, minSize: 0 },
+    { component: components[3]!, shrink: 1, minSize: 0 },
+    { component: components[4]!, shrink: 1, minSize: 3 },
+    { component: components[5]!, shrink: 1, minSize: 0 },
+    { component: components[6]!, shrink: 1, minSize: 1 },
+  ]);
+  const root = new VStack([
+    { component: transcript, basis: 0, grow: 1, shrink: 1, minSize: 1 },
+    { component: dock, basis: "auto", grow: 0, shrink: 1, minSize: 1 },
+  ]);
+  let renderRequests = 0;
+  const tui = {
+    mode: "fullscreen",
+    [VIEWPORT_TUI]: true,
+    children: components,
+    terminal: { columns: 120, rows: 30 },
+    layoutRoot: root,
+    requestRender() {
+      renderRequests += 1;
+    },
+  } as unknown as TUI;
+  return { dock, root, transcript, tui, renders: () => renderRequests };
+}
 
-  test("structural mutation cancels an explicitly requested idle cache reuse", () => {
-    const originalHistory = new Lines(
-      Array.from({ length: 20 }, (_, index) => `line-${index}`),
-    );
-    const history = new Container();
-    history.addChild(originalHistory);
-    const empty = new Lines([]);
-    const root: Pi083Root = {
-      history: [history],
-      fixed: [empty, empty, empty, new Lines(["editor"]), empty],
-      footer: new Lines(["footer"]),
-    };
-    const tui = { terminal: { rows: 8 } } as TUI;
-    const scroll = new ChatScrollState();
-    const sidebar = {
-      invalidations: 0,
-      render: (width: number, height: number) =>
-        Array.from({ length: height }, () => "#".repeat(width)),
-      invalidate() {
-        this.invalidations += 1;
-      },
-    };
-    const layout = new PatchedLayout(tui, root, scroll, sidebar);
-    const cleanup = observeInvalidation(root.history, () => layout.invalidateAll());
+interface RuntimeStack {
+  children: Component[];
+  entries: Array<{
+    component: Component;
+    visible?: (viewport: { width: number; height: number }) => boolean;
+  }>;
+}
 
-    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
-    scroll.scrollBy(-3);
-    layout.requestIdleScrollRender(true);
-    const appended = new Lines(["structurally appended"]);
-    history.addChild(appended);
-    layout.render(SIDEBAR_MIN_TERMINAL_WIDTH);
+function stack(component: Component): RuntimeStack {
+  return component as unknown as RuntimeStack;
+}
 
-    expect(originalHistory.renderCalls).toBe(2);
-    expect(appended.renderCalls).toBe(1);
-    expect(sidebar.invalidations).toBe(1);
-    cleanup();
-    expect(Object.hasOwn(history, "addChild")).toBe(false);
-  });
-});
-
-describe("ui customization events", () => {
-  test("session_tree invalidates history and sidebar before requesting a render", async () => {
+describe("ui customization docked lifecycle", () => {
+  test("installs an empty footer and toggles a hydrated 50-column transcript sibling", async () => {
     type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
+    type ShortcutHandler = (ctx: ExtensionContext) => unknown;
+    type CommandHandler = (args: string, ctx: ExtensionContext) => unknown;
     const handlers = new Map<string, Handler[]>();
-    let sessionNameReads = 0;
+    const busHandlers = new Map<string, Array<(data: unknown) => void>>();
+    const emitted: Array<{ event: string; data: unknown }> = [];
+    let shortcutHandler: ShortcutHandler | undefined;
+    let commandHandler: CommandHandler | undefined;
+
     const pi = {
       on(event: string, handler: Handler) {
         const registered = handlers.get(event) ?? [];
         registered.push(handler);
         handlers.set(event, registered);
       },
+      registerShortcut(
+        shortcut: string,
+        options: { handler: ShortcutHandler },
+      ) {
+        expect(shortcut).toBe("ctrl+b");
+        shortcutHandler = options.handler;
+      },
+      registerCommand(name: string, options: { handler: CommandHandler }) {
+        expect(name).toBe("sidebar");
+        commandHandler = options.handler;
+      },
       events: {
-        on() {},
-        emit() {},
+        on(event: string, handler: (data: unknown) => void) {
+          const registered = busHandlers.get(event) ?? [];
+          registered.push(handler);
+          busHandlers.set(event, registered);
+        },
+        emit(event: string, data: unknown) {
+          emitted.push({ event, data });
+          for (const handler of busHandlers.get(event) ?? []) handler(data);
+        },
       },
-      exec: async () => ({
-        code: 1,
-        stdout: "",
-        stderr: "",
-        killed: false,
-      }),
-      getSessionName() {
-        sessionNameReads += 1;
-        return "tree test";
-      },
+      exec: async () => ({ code: 1, stdout: "", stderr: "", killed: false }),
+      getSessionName: () => "docked test",
       getThinkingLevel: () => "off",
     } as unknown as ExtensionAPI;
     uiCustomization(pi);
 
+    const fixture = makeFullscreenTui();
     const theme = identityTheme();
-    let editorFactory: EditorFactory | undefined;
-    let terminalInput: ((data: string) => unknown) | undefined;
+    let footer: Component | undefined;
+    const notices: Array<[string, string]> = [];
     const context = {
       mode: "tui",
       cwd: "/repo",
-      isIdle: () => true,
       ui: {
         theme,
-        notify() {},
-        setEditorComponent(factory: EditorFactory | undefined) {
-          editorFactory = factory;
+        setFooter(
+          factory:
+            | ((tui: TUI, theme: Theme, data: unknown) => Component)
+            | undefined,
+        ) {
+          footer = factory?.(fixture.tui, theme, {});
         },
-        onTerminalInput(handler: (data: string) => unknown) {
-          terminalInput = handler;
-          return () => {};
+        custom() {
+          throw new Error("the docked sidebar must not create an overlay");
+        },
+        notify(message: string, level: string) {
+          notices.push([message, level]);
         },
       },
+      model: {
+        id: "model",
+        name: "Model",
+        contextWindow: 100_000,
+        reasoning: false,
+      },
+      thinkingLevel: "off",
       sessionManager: {
         getSessionId: () => "session",
         getEntries: () => [],
       },
       getContextUsage: () => ({
-        tokens: 0,
+        tokens: 10_000,
         contextWindow: 100_000,
-        percent: 0,
+        percent: 10,
       }),
     } as unknown as ExtensionContext;
 
     handlers.get("session_start")![0]!({ type: "session_start" }, context);
-    expect(editorFactory).toBeDefined();
-
-    const history = new Lines(["history"]);
-    const empty = new Lines([]);
-    const components: Component[] = [
-      history,
-      empty,
-      empty,
-      empty,
-      empty,
-      empty,
-      new Lines(["editor"]),
-      empty,
-      new Lines(["footer"]),
-    ];
-    const tui = new Container() as unknown as TUI;
-    for (const component of components) tui.addChild(component);
-    const terminalWrites: string[] = [];
-    let renderRequests = 0;
-    Object.assign(tui, {
-      terminal: {
-        rows: 20,
-        columns: SIDEBAR_MIN_TERMINAL_WIDTH,
-        write: (data: string) => terminalWrites.push(data),
-      },
-      requestRender: () => {
-        renderRequests += 1;
-      },
+    await Promise.resolve();
+    expect(emitted).toContainEqual({
+      event: DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
+      data: { sessionId: "session" },
     });
-    const editorTheme = {
-      borderColor: (text: string) => text,
-      selectList: {},
-    } as EditorTheme;
-    editorFactory!(tui, editorTheme, {} as never);
+    expect(footer?.render(120)).toEqual([]);
+    expect(notices).toEqual([]);
+
+    const patchedRoot = stack(fixture.root);
+    const transcriptColumns = stack(patchedRoot.children[0]!);
+    const sidebarEntry = transcriptColumns.entries[1]!;
+    expect(sidebarEntry.visible?.({ width: 120, height: 30 })).toBe(true);
+    expect(stack(patchedRoot.children[1]!).children).toHaveLength(5);
+
+    shortcutHandler!(context);
+    expect(sidebarEntry.visible?.({ width: 120, height: 30 })).toBe(false);
+    expect(sidebarEntry.visible?.({ width: 99, height: 30 })).toBe(false);
+
+    const rendersBeforeWorkflow = fixture.renders();
+    for (const handler of busHandlers.get(DYNAMIC_WORKFLOW_RUN_EVENT) ?? []) {
+      handler({
+        sessionId: "session",
+        phase: "progress",
+        run: {
+          runId: "run",
+          sessionId: "session",
+          name: "Live review",
+          status: "running",
+          startedAt: 1,
+          agentCount: 1,
+          agents: [{ id: "reviewer", role: "reviewer", status: "running" }],
+        },
+      });
+    }
+    expect(fixture.renders()).toBeGreaterThan(rendersBeforeWorkflow);
+    expect(sidebarEntry.component.render(50).join("\n")).toContain(
+      "Live review",
+    );
+
+    commandHandler!("", context);
+    expect(sidebarEntry.visible?.({ width: 120, height: 30 })).toBe(true);
+
+    handlers.get("session_shutdown")![0]!(
+      { type: "session_shutdown" },
+      context,
+    );
+    expect(stack(fixture.root).children).toEqual([
+      fixture.transcript,
+      fixture.dock,
+    ]);
+  });
+
+  test("warns instead of opening outside TUI mode", () => {
+    type ShortcutHandler = (ctx: ExtensionContext) => unknown;
+    let shortcutHandler: ShortcutHandler | undefined;
+    const pi = {
+      on() {},
+      registerShortcut(
+        _shortcut: string,
+        options: { handler: ShortcutHandler },
+      ) {
+        shortcutHandler = options.handler;
+      },
+      registerCommand() {},
+      events: { on() {}, emit() {} },
+    } as unknown as ExtensionAPI;
+    uiCustomization(pi);
+
+    const notices: Array<[string, string]> = [];
+    const context = {
+      mode: "print",
+      ui: {
+        notify: (message: string, level: string) =>
+          notices.push([message, level]),
+      },
+    } as unknown as ExtensionContext;
+
+    shortcutHandler!(context);
+    expect(notices).toEqual([
+      ["The session sidebar requires interactive TUI mode", "warning"],
+    ]);
+  });
+
+  test("warns once and restores the default footer for an incompatible fullscreen tree", async () => {
+    type Handler = (event: unknown, ctx: ExtensionContext) => unknown;
+    const handlers = new Map<string, Handler[]>();
+    const pi = {
+      on(event: string, handler: Handler) {
+        handlers.set(event, [handler]);
+      },
+      registerShortcut() {},
+      registerCommand() {},
+      events: { on() {}, emit() {} },
+      exec: async () => ({ code: 1, stdout: "", stderr: "", killed: false }),
+    } as unknown as ExtensionAPI;
+    uiCustomization(pi);
+
+    const notices: string[] = [];
+    const incompatibleRoot = new Lines(["owned elsewhere"]);
+    const tui = {
+      mode: "fullscreen",
+      [VIEWPORT_TUI]: true,
+      children: [],
+      terminal: { columns: 120, rows: 30 },
+      layoutRoot: incompatibleRoot,
+      requestRender() {},
+    } as unknown as TUI;
+    let footer: Component | undefined;
+    const context = {
+      mode: "tui",
+      cwd: "/repo",
+      ui: {
+        theme: identityTheme(),
+        notify: (message: string) => notices.push(message),
+        setFooter(
+          factory:
+            | ((tui: TUI, theme: Theme, data: unknown) => Component)
+            | undefined,
+        ) {
+          footer = factory?.(tui, identityTheme(), {});
+        },
+      },
+      sessionManager: { getSessionId: () => "session", getEntries: () => [] },
+    } as unknown as ExtensionContext;
+
+    handlers.get("session_start")![0]!({}, context);
+    footer?.render(120);
+    footer?.invalidate();
     await Promise.resolve();
-    await Promise.resolve();
-
-    tui.render(SIDEBAR_MIN_TERMINAL_WIDTH);
-    const historyReadsBeforeTree = history.renderCalls;
-    const sidebarReadsBeforeTree = sessionNameReads;
-    terminalInput!("\x1b[5;2~");
-    const requestsBeforeTree = renderRequests;
-
-    handlers.get("session_tree")![0]!({ type: "session_tree" }, context);
-    expect(renderRequests).toBe(requestsBeforeTree + 1);
-    tui.render(SIDEBAR_MIN_TERMINAL_WIDTH);
-
-    expect(history.renderCalls).toBe(historyReadsBeforeTree + 1);
-    expect(sessionNameReads).toBe(sidebarReadsBeforeTree + 1);
-
-    handlers.get("session_shutdown")![0]!({ type: "session_shutdown" }, context);
-    expect(terminalWrites.length).toBeGreaterThanOrEqual(2);
+    expect(notices).toHaveLength(1);
+    expect(footer).toBeUndefined();
+    expect((tui as unknown as { layoutRoot: Component }).layoutRoot).toBe(
+      incompatibleRoot,
+    );
   });
 });

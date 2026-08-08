@@ -41,21 +41,9 @@ export function selectSidebarWorkflowRuns(
   runs: Iterable<DynamicWorkflowRunSnapshot>,
   sessionId: string,
 ): DynamicWorkflowRunSnapshot[] {
-  const current = Array.from(runs).filter((run) => run.sessionId === sessionId);
-  const active = current
-    .filter((run) => run.status === "running")
+  return Array.from(runs)
+    .filter((run) => run.sessionId === sessionId)
     .sort((left, right) => right.startedAt - left.startedAt);
-  if (active.length) return active;
-
-  return current
-    .filter((run) => run.status !== "running")
-    .sort(
-      (left, right) =>
-        (right.finishedAt ?? right.startedAt) -
-          (left.finishedAt ?? left.startedAt) ||
-        right.startedAt - left.startedAt,
-    )
-    .slice(0, 1);
 }
 
 /** Session-scoped event state kept separate from persisted sidebar metadata. */

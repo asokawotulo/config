@@ -21,7 +21,11 @@ import {
   resolveGitMetadata,
   type SidebarMetadata,
 } from "./metadata.ts";
-import { contextUsageColor, SidebarComponent } from "./sidebar.ts";
+import {
+  contextUsageColor,
+  SIDEBAR_WIDTH,
+  SidebarComponent,
+} from "./sidebar.ts";
 
 function entry(value: unknown): SessionEntry {
   return value as SessionEntry;
@@ -56,13 +60,15 @@ function workflowRun(
     name: options.name ?? runId,
     status,
     startedAt,
-    ...(options.finishedAt === undefined ? {} : { finishedAt: options.finishedAt }),
+    ...(options.finishedAt === undefined
+      ? {}
+      : { finishedAt: options.finishedAt }),
     agentCount: agents.length,
     agents,
   };
 }
 
-function sidebarMetadata(
+function widgetMetadata(
   workflowRuns: readonly DynamicWorkflowRunSnapshot[] = [],
 ): SidebarMetadata {
   return {
@@ -90,32 +96,30 @@ function identityTheme(): Theme {
   } as unknown as Theme;
 }
 
-function trackingTheme(calls: Array<{ color: string; text: string }>): Theme {
-  const identity = (text: string) => text;
-  return {
-    fg: (color: string, text: string) => {
-      calls.push({ color, text });
-      return text;
-    },
-    bg: (_color: string, text: string) => text,
-    bold: identity,
-  } as unknown as Theme;
-}
-
-describe("sidebar metadata", () => {
+describe("status widget metadata", () => {
   test("counts assistant, tool, compaction, and branch-summary cost", () => {
     const entries = [
-      entry({ type: "message", message: { role: "assistant", usage: usage(1) } }),
-      entry({ type: "message", message: { role: "toolResult", usage: usage(2) } }),
+      entry({
+        type: "message",
+        message: { role: "assistant", usage: usage(1) },
+      }),
+      entry({
+        type: "message",
+        message: { role: "toolResult", usage: usage(2) },
+      }),
       entry({ type: "compaction", usage: usage(3) }),
       entry({ type: "branch_summary", usage: usage(4) }),
     ];
 
     expect(calculateSessionCost(entries)).toBe(10);
-    expect(calculateSessionCosts(entries)).toEqual({ total: 10, main: 10, subagents: 0 });
+    expect(calculateSessionCosts(entries)).toEqual({
+      total: 10,
+      main: 10,
+      subagents: 0,
+    });
   });
 
-  test("partitions workflow cost and does not double-count persisted event usage", () => {
+  test("partitions workflow cost without double-counting persisted usage", () => {
     const settled = entry({
       type: "message",
       message: {
@@ -145,7 +149,7 @@ describe("sidebar metadata", () => {
     });
   });
 
-  test("replaces active snapshot cost when its settled tool result persists", () => {
+  test("replaces active snapshot cost when its result persists", () => {
     const run = workflowRun("transition", "running", 1, {
       agents: [{ id: "agent", role: "worker", status: "running", cost: 3 }],
     });
@@ -163,11 +167,17 @@ describe("sidebar metadata", () => {
     expect(calculateSessionCosts([result], [run]).subagents).toBe(3);
   });
 
-  test("formats context tokens and home-relative directories", () => {
+  test("formats context tokens, percentages, and home-relative directories", () => {
     expect(formatTokenCount(0)).toBe("0");
     expect(formatTokenCount(272_000)).toBe("272K");
     expect(formatTokenCount(null)).toBe("?");
-    expect(formatDirectory("/Users/test/project", "/Users/test")).toBe("~/project");
+    expect(formatDirectory("/Users/test/project", "/Users/test")).toBe(
+      "~/project",
+    );
+    expect(contextUsageColor(50)).toBe("muted");
+    expect(contextUsageColor(50.01)).toBe("accent");
+    expect(contextUsageColor(80)).toBe("accent");
+    expect(contextUsageColor(80.01)).toBe("error");
   });
 
   test("carries the raw context percentage", () => {
@@ -185,8 +195,9 @@ describe("sidebar metadata", () => {
       sessionManager: { getEntries: () => [] },
     } as unknown as ExtensionContext;
 
-    expect(buildSidebarMetadata(pi, ctx, { branchWorktree: "main" }).contextPercent)
-      .toBe(63.125);
+    expect(
+      buildSidebarMetadata(pi, ctx, { branchWorktree: "main" }).contextPercent,
+    ).toBe(63.125);
   });
 
   test("formats linked worktrees as branch/worktree", async () => {
@@ -200,240 +211,180 @@ describe("sidebar metadata", () => {
       }),
     } as unknown as ExtensionAPI;
 
-    await expect(resolveGitMetadata(pi, "/repo/worktrees/feature")).resolves.toEqual({
+    await expect(
+      resolveGitMetadata(pi, "/repo/worktrees/feature"),
+    ).resolves.toEqual({
       branchWorktree: "feature/login/feature",
     });
   });
 });
 
-describe("dynamic workflow sidebar state", () => {
-  test("filters by session, shows all active runs, and hydrates the newest settled run", () => {
+describe("dynamic workflow widget state", () => {
+  test("filters by session and returns every run newest-first", () => {
     const state = new DynamicWorkflowSidebarState();
     state.beginSession("session-a");
 
-    expect(state.applyRun({
-      sessionId: "session-b",
-      phase: "started",
-      run: workflowRun("foreign", "running", 9, { sessionId: "session-b" }),
-    })).toBe(false);
+    expect(
+      state.applyRun({
+        sessionId: "session-b",
+        phase: "started",
+        run: workflowRun("foreign", "running", 9, { sessionId: "session-b" }),
+      }),
+    ).toBe(false);
 
     for (const run of [
       workflowRun("active-old", "running", 2),
       workflowRun("settled", "completed", 8, { finishedAt: 9 }),
       workflowRun("active-new", "running", 4),
     ]) {
-      expect(state.applyRun({ sessionId: "session-a", phase: "progress", run })).toBe(true);
+      expect(
+        state.applyRun({ sessionId: "session-a", phase: "progress", run }),
+      ).toBe(true);
     }
     expect(state.getVisibleRuns().map((run) => run.runId)).toEqual([
+      "settled",
       "active-new",
       "active-old",
     ]);
 
-    expect(state.applyState({
-      sessionId: "session-a",
-      runs: [
-        workflowRun("older", "failed", 10, { finishedAt: 20 }),
-        workflowRun("foreign", "completed", 30, {
-          sessionId: "session-b",
-          finishedAt: 40,
-        }),
-        workflowRun("newest", "completed", 15, { finishedAt: 25 }),
-      ],
-    })).toBe(true);
-    expect(state.getVisibleRuns().map((run) => run.runId)).toEqual(["newest"]);
-
-    state.beginSession("session-b");
-    expect(state.getVisibleRuns()).toEqual([]);
+    expect(
+      state.applyState({
+        sessionId: "session-a",
+        runs: [
+          workflowRun("older", "failed", 10, { finishedAt: 20 }),
+          workflowRun("foreign", "completed", 30, {
+            sessionId: "session-b",
+            finishedAt: 40,
+          }),
+          workflowRun("newest", "completed", 15, { finishedAt: 25 }),
+          workflowRun("running", "running", 12),
+        ],
+      }),
+    ).toBe(true);
+    expect(state.getVisibleRuns().map((run) => run.runId)).toEqual([
+      "newest",
+      "running",
+      "older",
+    ]);
   });
 });
 
 describe("SidebarComponent", () => {
-  test("caches metadata and rendered rows until invalidated or resized", () => {
-    const metadata = sidebarMetadata();
-    let metadataCalls = 0;
-    let themeCalls = 0;
+  test("renders a 50-column panel with sections in the required order", () => {
     const sidebar = new SidebarComponent(
-      () => {
-        metadataCalls += 1;
-        return metadata;
-      },
-      () => {
-        themeCalls += 1;
-        return identityTheme();
-      },
-    );
-
-    const first = sidebar.render(30, 20);
-    expect(sidebar.render(30, 20)).toBe(first);
-    expect(metadataCalls).toBe(1);
-    expect(themeCalls).toBe(1);
-
-    metadata.sessionName = "Updated session";
-    sidebar.invalidate();
-    expect(sidebar.render(30, 20).join("\n")).toContain("Updated session");
-    expect(metadataCalls).toBe(2);
-    expect(themeCalls).toBe(2);
-
-    sidebar.render(30, 19);
-    expect(metadataCalls).toBe(3);
-    expect(themeCalls).toBe(3);
-  });
-
-  test("uses context warning colors at the exact boundaries", () => {
-    expect(contextUsageColor(null)).toBe("muted");
-    expect(contextUsageColor(Number.NaN)).toBe("muted");
-    expect(contextUsageColor(50)).toBe("muted");
-    expect(contextUsageColor(50.01)).toBe("accent");
-    expect(contextUsageColor(80)).toBe("accent");
-    expect(contextUsageColor(80.01)).toBe("error");
-  });
-
-  test("colors both context rows while preserving percentage formatting", () => {
-    const cases: Array<[number | null, string, string]> = [
-      [null, "muted", "?"],
-      [50, "muted", "50.00%"],
-      [50.01, "accent", "50.01%"],
-      [80, "accent", "80.00%"],
-      [80.01, "error", "80.01%"],
-    ];
-
-    for (const [percent, color, formattedPercent] of cases) {
-      const calls: Array<{ color: string; text: string }> = [];
-      const metadata = sidebarMetadata();
-      metadata.contextPercent = percent;
-      const sidebar = new SidebarComponent(
-        () => metadata,
-        () => trackingTheme(calls),
-      );
-
-      sidebar.render(30, 20);
-
-      expect(calls).toContainEqual({ color, text: "0/272K" });
-      expect(calls).toContainEqual({ color, text: formattedPercent });
-    }
-  });
-
-  test("renders context cost and respects width", () => {
-    const sidebar = new SidebarComponent(
-      () => sidebarMetadata(),
+      widgetMetadata,
       identityTheme,
+      () => 34,
     );
-    const lines = sidebar.render(30, 20);
+    const lines = sidebar.render(SIDEBAR_WIDTH);
+    const text = lines.join("\n");
 
-    expect(lines.join("\n")).toContain("Total $1.234");
-    expect(lines.join("\n")).toContain("Main $1.000");
-    expect(lines.join("\n")).toContain("Subagents $0.234");
-    expect(lines.every((line) => visibleWidth(line) === 30)).toBe(true);
+    const sectionRow = (heading: string) =>
+      lines.findIndex(
+        (line) => line.replace(/^│\s*/, "").trim() === heading,
+      );
+    expect(sectionRow("Directory")).toBeLessThan(sectionRow("Session"));
+    expect(sectionRow("Session")).toBeLessThan(sectionRow("Context"));
+    expect(sectionRow("Context")).toBeLessThan(sectionRow("Model"));
+    expect(sectionRow("Model")).toBeLessThan(sectionRow("Workflow"));
+    expect(text).toContain("~/config");
+    expect(text).toContain("0 / 272K  0.00%");
+    expect(text).toContain("Total $1.234");
+    expect(text).not.toContain("Ctrl+B hide");
+    expect(text).not.toContain("/workflows inspect");
+    expect(text).not.toContain("─");
+    expect(lines.every((line) => line.startsWith("│"))).toBe(true);
+    expect(lines.every((line) => visibleWidth(line) === SIDEBAR_WIDTH)).toBe(
+      true,
+    );
   });
 
-  test("renders workflow statuses and one bounded activity row before context and model", () => {
-    const run = workflowRun("active", "running", 1, {
+  test("shows workflow agents when height permits and compacts on short terminals", () => {
+    const run = workflowRun("live", "running", 1, {
       name: "Parallel review",
       agents: [
         {
           id: "research",
           role: "researcher",
           status: "running",
-          activity: `Indexing ${"a".repeat(100)}`,
+          activity: "Reading files",
+          cost: 0.25,
         },
         { id: "verify", role: "reviewer", status: "completed" },
       ],
     });
-    const sidebar = new SidebarComponent(
-      () => sidebarMetadata([run]),
-      identityTheme,
-    );
-    const lines = sidebar.render(30, 30);
-    const text = lines.join("\n");
-
-    expect(text.indexOf("Directory")).toBeLessThan(text.indexOf("Session"));
-    expect(text.indexOf("Session")).toBeLessThan(text.indexOf("Context"));
-    expect(text.indexOf("Context")).toBeLessThan(text.indexOf("Model"));
-    expect(text.indexOf("Model")).toBeLessThan(text.indexOf("Workflow"));
-    expect(text).toContain("running research");
-    expect(text).toContain("completed verify");
-    expect(lines.filter((line) => line.includes("Indexing"))).toHaveLength(1);
-    expect(text).not.toContain("a".repeat(100));
-    expect(lines.every((line) => visibleWidth(line) <= 30)).toBe(true);
-  });
-
-  test("reserves Context and Model rows before optional activity", () => {
-    const sidebar = new SidebarComponent(
-      () => sidebarMetadata([
-        workflowRun("boundary", "running", 1, {
-          agents: [{ id: "worker", role: "worker", status: "running", activity: "optional detail" }],
-        }),
-      ]),
-      identityTheme,
-    );
-    const text = sidebar.render(30, 15).join("\n");
-
-    expect(text).toContain("Context");
-    expect(text).toContain("Model");
-    expect(text).toContain("running worker");
-    expect(text).not.toContain("optional detail");
-  });
-
-  test("uses scarce rows for every agent status before running activity", () => {
-    const agents: DynamicWorkflowAgentSnapshot[] = Array.from(
-      { length: 5 },
-      (_, index) => ({
-        id: `a${index}`,
-        role: "worker",
-        status: "running",
-        activity: `activity-${index}`,
-      }),
-    );
-    const sidebar = new SidebarComponent(
-      () => sidebarMetadata([
-        workflowRun("budget", "running", 1, { name: "Budget", agents }),
-      ]),
-      identityTheme,
-    );
-    const lines = sidebar.render(30, 20);
-    const text = lines.join("\n");
-
-    for (const agent of agents) expect(text).toContain(`running ${agent.id}`);
-    expect(text).not.toContain("activity-");
-    expect(text).toContain("Context");
-    expect(text).toContain("Model");
-    expect(lines).toHaveLength(20);
-    expect(lines.every((line) => visibleWidth(line) <= 30)).toBe(true);
-  });
-
-  test("shows per-agent costs only when spare height permits", () => {
-    const run = workflowRun("costs", "running", 1, {
-      agents: [{ id: "worker", role: "worker", status: "running", cost: 0.25 }],
+    const settled = workflowRun("settled", "completed", 2, {
+      name: "Earlier implementation",
     });
-    const sidebar = new SidebarComponent(
-      () => sidebarMetadata([run]),
+    const tall = new SidebarComponent(
+      () => widgetMetadata([settled, run]),
       identityTheme,
-    );
+      () => 44,
+    )
+      .render(SIDEBAR_WIDTH)
+      .join("\n");
+    expect(tall).toContain("Parallel review");
+    expect(tall).toContain("Earlier implementation");
+    expect(tall).toContain("running research");
+    expect(tall).toContain("completed verify");
 
-    expect(sidebar.render(30, 16).join("\n")).not.toContain("$0.250");
-    expect(sidebar.render(30, 30).join("\n")).toContain("$0.250");
+    const compact = new SidebarComponent(
+      () => widgetMetadata([run]),
+      identityTheme,
+      () => 11,
+    ).render(SIDEBAR_WIDTH);
+    const compactText = compact.join("\n");
+    for (const heading of [
+      "Directory",
+      "Session",
+      "Context",
+      "Model",
+      "Workflow",
+    ]) {
+      expect(compactText).toContain(heading);
+    }
+    expect(compact).toHaveLength(11);
+
+    const manyRuns = Array.from({ length: 8 }, (_, index) =>
+      workflowRun(`run-${index}`, "completed", 8 - index),
+    );
+    const constrained = new SidebarComponent(
+      () => widgetMetadata(manyRuns),
+      identityTheme,
+      () => 11,
+    )
+      .render(SIDEBAR_WIDTH)
+      .join("\n");
+    expect(constrained).toContain("run-0");
+    expect(constrained).toContain("more workflows");
   });
 
-  test("retains exact hit targets only for visible agent status rows", () => {
-    const run = workflowRun("clickable", "running", 1, {
-      agents: [{ id: "worker", role: "reviewer", status: "running" }],
-    });
+  test("caches by width and transcript height until invalidated", () => {
+    const metadata = widgetMetadata();
+    let metadataCalls = 0;
+    let height = 34;
     const sidebar = new SidebarComponent(
-      () => sidebarMetadata([run]),
+      () => {
+        metadataCalls += 1;
+        return metadata;
+      },
       identityTheme,
+      () => height,
     );
-    const lines = sidebar.render(30, 24);
-    const row = lines.findIndex((line) => line.includes("running worker"));
 
-    expect(sidebar.hitTestAgent(row)).toEqual({
-      sessionId: "session-a",
-      runId: "clickable",
-      agentId: "worker",
-    });
-    expect(sidebar.hitTestAgent(row - 1)).toBeUndefined();
+    const first = sidebar.render(SIDEBAR_WIDTH);
+    expect(sidebar.render(SIDEBAR_WIDTH)).toBe(first);
+    expect(metadataCalls).toBe(1);
+
+    height = 35;
+    expect(sidebar.render(SIDEBAR_WIDTH)).toHaveLength(35);
+    expect(metadataCalls).toBe(1);
+
+    metadata.sessionName = "Updated session";
     sidebar.invalidate();
-    expect(sidebar.hitTestAgent(row)).toBeUndefined();
-    sidebar.render(30, row);
-    expect(sidebar.hitTestAgent(row)).toBeUndefined();
+    expect(sidebar.render(SIDEBAR_WIDTH).join("\n")).toContain(
+      "Updated session",
+    );
+    expect(metadataCalls).toBe(2);
   });
 });
