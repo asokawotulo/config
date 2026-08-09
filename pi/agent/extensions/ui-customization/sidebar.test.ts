@@ -5,7 +5,11 @@ import type {
   SessionEntry,
   Theme,
 } from "@earendil-works/pi-coding-agent";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import {
+  TuiAltScreen,
+  visibleWidth,
+  type Terminal,
+} from "@earendil-works/pi-tui";
 import {
   MAX_DYNAMIC_WORKFLOW_AGENTS,
   MAX_DYNAMIC_WORKFLOW_RUNS,
@@ -95,6 +99,31 @@ function identityTheme(): Theme {
     bg: (_color: string, text: string) => text,
     bold: identity,
   } as unknown as Theme;
+}
+
+class SelectionTerminal implements Terminal {
+  writes: string[] = [];
+  kittyProtocolActive = false;
+
+  constructor(
+    public columns: number,
+    public rows: number,
+  ) {}
+
+  start(): void {}
+  stop(): void {}
+  async drainInput(): Promise<void> {}
+  write(data: string): void {
+    this.writes.push(data);
+  }
+  moveBy(): void {}
+  hideCursor(): void {}
+  showCursor(): void {}
+  clearLine(): void {}
+  clearFromCursor(): void {}
+  clearScreen(): void {}
+  setTitle(): void {}
+  setProgress(): void {}
 }
 
 describe("status widget metadata", () => {
@@ -446,5 +475,58 @@ describe("SidebarComponent", () => {
       "Updated session",
     );
     expect(metadataCalls).toBe(2);
+  });
+
+  test("copies multiline content without the separator", () => {
+    const height = 12;
+    const sidebar = new SidebarComponent(
+      widgetMetadata,
+      identityTheme,
+      () => height,
+    );
+    const terminal = new SelectionTerminal(SIDEBAR_WIDTH, height);
+    const tui = new TuiAltScreen(terminal);
+    tui.setLayoutRoot(sidebar);
+    tui.start();
+    tui.renderNow(true);
+
+    const select = tui as unknown as {
+      handleSelectionMouseEvent(event: {
+        button: number;
+        x: number;
+        y: number;
+        release: boolean;
+      }): void;
+    };
+    select.handleSelectionMouseEvent({
+      button: 0,
+      x: 2,
+      y: 2,
+      release: false,
+    });
+    select.handleSelectionMouseEvent({
+      button: 32,
+      x: 12,
+      y: 4,
+      release: false,
+    });
+    select.handleSelectionMouseEvent({
+      button: 0,
+      x: 12,
+      y: 4,
+      release: true,
+    });
+
+    const clipboardWrite = terminal.writes.findLast((write) =>
+      write.startsWith("\u001b]52;c;"),
+    );
+    expect(clipboardWrite).toBeDefined();
+    const encoded = clipboardWrite!.slice("\u001b]52;c;".length, -1);
+    const copied = Buffer.from(encoded, "base64").toString("utf8");
+    expect(copied).toContain("Directory");
+    expect(copied).toContain("~/config");
+    expect(copied).not.toContain("│");
+
+    tui.stop();
   });
 });

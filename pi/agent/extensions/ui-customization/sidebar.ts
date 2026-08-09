@@ -1,5 +1,7 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import {
+  HStack,
+  ScrollView,
   truncateToWidth,
   visibleWidth,
   type Component,
@@ -242,22 +244,37 @@ function fitRows(rows: readonly SidebarRow[], budget: number): SidebarRow[] {
   return rows.filter((row) => !removed.has(row));
 }
 
-function renderSidebarLine(
+function renderSidebarContentLine(
   theme: Theme,
   width: number,
   text: string,
 ): string {
   const safeWidth = Math.max(1, Math.floor(width));
-  const contentWidth = Math.max(0, safeWidth - 1);
-  const clipped = truncateToWidth(text, contentWidth, "");
+  const clipped = truncateToWidth(text, safeWidth, "");
   const padded = `${clipped}${" ".repeat(
-    Math.max(0, contentWidth - visibleWidth(clipped)),
+    Math.max(0, safeWidth - visibleWidth(clipped)),
   )}`;
-  return `${theme.fg("borderMuted", "│")}${theme.bg("customMessageBg", padded)}`;
+  return theme.bg("customMessageBg", padded);
 }
 
-/** Read-only inspector sized to Pi's fullscreen transcript region. */
-export class SidebarComponent implements Component {
+class SidebarSeparatorComponent implements Component {
+  constructor(
+    private readonly getTheme: () => Theme,
+    private readonly getHeight: () => number,
+  ) {}
+
+  invalidate(): void {}
+
+  render(_width: number): string[] {
+    const line = this.getTheme().fg("borderMuted", "│");
+    return Array.from(
+      { length: Math.max(1, Math.floor(this.getHeight())) },
+      () => line,
+    );
+  }
+}
+
+class SidebarContentComponent implements Component {
   private cachedMetadata: SidebarMetadata | undefined;
   private cachedWidth: number | undefined;
   private cachedHeight: number | undefined;
@@ -312,7 +329,82 @@ export class SidebarComponent implements Component {
       ...bodyLines,
     ]
       .slice(0, height)
-      .map((line) => renderSidebarLine(theme, width, line));
+      .map((line) => renderSidebarContentLine(theme, width, line));
+    return this.cachedLines;
+  }
+}
+
+/** Read-only inspector whose content owns a border-free selection region. */
+export class SidebarComponent extends HStack {
+  private readonly separator: SidebarSeparatorComponent;
+  private readonly contentViewport: ScrollView;
+  private cachedWidth: number | undefined;
+  private cachedHeight: number | undefined;
+  private cachedLines: string[] | undefined;
+
+  constructor(
+    getMetadata: () => SidebarMetadata,
+    getTheme: () => Theme,
+    private readonly getHeight: () => number,
+  ) {
+    const separator = new SidebarSeparatorComponent(getTheme, getHeight);
+    const content = new SidebarContentComponent(
+      getMetadata,
+      getTheme,
+      getHeight,
+    );
+    const contentViewport = new ScrollView(content, {
+      primary: false,
+      overscroll: "chain",
+    });
+    super([
+      {
+        component: separator,
+        basis: 1,
+        grow: 0,
+        shrink: 0,
+        minSize: 1,
+        maxSize: 1,
+      },
+      {
+        component: contentViewport,
+        basis: 0,
+        grow: 1,
+        shrink: 1,
+        minSize: 1,
+      },
+    ]);
+    this.separator = separator;
+    this.contentViewport = contentViewport;
+  }
+
+  override invalidate(): void {
+    super.invalidate();
+    this.cachedWidth = undefined;
+    this.cachedHeight = undefined;
+    this.cachedLines = undefined;
+  }
+
+  /** Preserve normal component rendering for measurement and focused tests. */
+  override render(width: number): string[] {
+    const safeWidth = Math.max(1, Math.floor(width));
+    const height = Math.max(1, Math.floor(this.getHeight()));
+    if (
+      this.cachedLines &&
+      this.cachedWidth === safeWidth &&
+      this.cachedHeight === height
+    ) {
+      return this.cachedLines;
+    }
+
+    const separatorLines = this.separator.render(1);
+    const contentLines =
+      safeWidth === 1 ? [] : this.contentViewport.render(safeWidth - 1);
+    this.cachedWidth = safeWidth;
+    this.cachedHeight = height;
+    this.cachedLines = separatorLines.map(
+      (separator, index) => `${separator}${contentLines[index] ?? ""}`,
+    );
     return this.cachedLines;
   }
 }
