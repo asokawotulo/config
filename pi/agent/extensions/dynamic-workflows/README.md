@@ -1,6 +1,6 @@
 # Dynamic Workflows
 
-`dynamic_workflow` lets the parent model propose a complete static DAG of isolated Pi agents. A valid proposal opens directly on a confirmation page; invalid source opens in raw-source recovery. Nothing starts until the proposal validates and the user confirms it.
+`dynamic_workflow` lets the parent model propose a complete static DAG of isolated Pi agents. A valid proposal opens directly on a confirmation page; an invalid proposal returns a tool error to the parent model so it can correct and resubmit the complete workflow. Nothing starts until the proposal validates and the user confirms it.
 
 ## Workflow format
 
@@ -50,7 +50,7 @@ Pi's terminal Mermaid renderer draws the DAG with Unicode box art. If full agent
 
 The overlay is capped at 75% of terminal height so it stays clear of the editor; long tables and graphs remain accessible with **Up/Down** scrolling. Use **Enter** to run, **Space** to suggest a revision, and **Escape** to cancel. Suggest opens a multiline text field; **Enter** submits non-empty feedback, **Shift+Enter** inserts a line, and **Escape** returns to confirmation. Submission rejects the current proposal without launching agents and returns the feedback to the parent model, which must apply it and call `dynamic_workflow` again with a complete revised DAG.
 
-Run is disabled while role/resource, DAG, output-reference, model/tool/skill, or context validation fails, but Suggest and Cancel remain available. On Run, canonical static source is resolved and runtime resources are validated again before execution. Raw source editing remains only as recovery when the proposed source cannot be parsed; successful parsing proceeds to confirmation.
+Static source, role/resource, DAG, output-reference, model/tool/skill, and context validation complete before the confirmation page opens. A failure returns an errored tool result with the validation message to the parent model; the user is not asked to repair invalid source. On Run, canonical static source and runtime resources are validated again before execution. If that boundary fails because resources changed during confirmation, the dialog closes and the failure is returned to the parent model through the same errored tool result.
 
 ## Roles
 

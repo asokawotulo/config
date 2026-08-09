@@ -122,12 +122,13 @@ Every Bash/Shell command is inspected solely by `cc-safety-net explain --json`. 
 
 After calling `dynamic_workflow`:
 
-1. The user receives a confirmation page with the Mermaid-rendered DAG and complete subagent capabilities rather than raw code by default.
-2. **Enter** runs a valid proposal, **Space** opens free-text suggestions, and **Escape** cancels.
-3. When the tool returns a user suggestion, apply it to the complete workflow and call `dynamic_workflow` again with a revised static DAG. Do not run or merely explain the rejected proposal.
-4. Cancellation means no subagent runs; acknowledge it without immediately resubmitting.
-5. During execution, the sidebar shows current-session workflows and subagent states.
-6. `/workflows` shows persisted run details, results, errors, and permission decisions.
+1. If the tool returns a validation error, correct the complete workflow and call `dynamic_workflow` again. Do not ask the user to repair invalid source or merely explain the failed proposal.
+2. A valid proposal opens a confirmation page with the Mermaid-rendered DAG and complete subagent capabilities rather than raw code.
+3. **Enter** runs a valid proposal, **Space** opens free-text suggestions, and **Escape** cancels.
+4. When the tool returns a user suggestion, apply it to the complete workflow and call `dynamic_workflow` again with a revised static DAG. Do not run or merely explain the rejected proposal.
+5. Cancellation means no subagent runs; acknowledge it without immediately resubmitting.
+6. During execution, the sidebar shows current-session workflows and subagent states.
+7. `/workflows` shows persisted run details, results, errors, and permission decisions.
 
 If a dependency fails, descendants are skipped while unrelated branches continue. Treat a partially failed workflow as evidence to inspect, not as automatic success.
 

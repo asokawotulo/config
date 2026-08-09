@@ -50,7 +50,7 @@ function dialog(
   const component = new WorkflowDialogComponent({
     tui,
     theme,
-    source: input,
+    plan: resolveSource(input),
     roles,
     resolveSource,
     onDone: (value) => { result = value; completed = true; },
@@ -115,6 +115,19 @@ describe("workflow confirmation dialog", () => {
     expect(resolves).toBeGreaterThanOrEqual(2);
   });
 
+  test("returns late validation failures to the tool boundary", () => {
+    let resolves = 0;
+    const state = dialog(source, (value) => {
+      resolves++;
+      if (resolves > 1) throw new Error("model became unavailable");
+      return resolveWorkflow(value, roles);
+    });
+
+    state.component.handleInput("\r");
+
+    expect(state.result()).toEqual({ action: "invalid", error: "model became unavailable" });
+  });
+
   test("Space collects a free-text suggestion without running", () => {
     const state = dialog();
     state.component.focused = true;
@@ -136,25 +149,4 @@ describe("workflow confirmation dialog", () => {
     expect(state.result()).toEqual({ action: "cancel" });
   });
 
-  test("resource errors disable Run while Suggest remains available", () => {
-    const state = dialog(source, () => { throw new Error("unavailable model test/model"); });
-    const rendered = state.component.render(100).join("\n");
-    expect(rendered).toContain("Run is disabled");
-    expect(rendered).toContain("unavailable model");
-    state.component.handleInput("\r");
-    expect(state.completed()).toBe(false);
-    state.component.handleInput(" ");
-    expect(state.component.render(100).join("\n")).toContain("Suggest a workflow revision");
-  });
-
-  test("invalid-source recovery keeps Editor IME focus and parses into confirmation", () => {
-    const state = dialog("export const workflow = nope;");
-    state.component.focused = true;
-    const rendered = state.component.render(80).join("\n");
-    expect(rendered).toContain("Raw source recovery");
-    expect(rendered).toContain("static");
-    expect(rendered).toContain(CURSOR_MARKER);
-    state.component.focused = false;
-    expect(state.component.render(80).join("\n")).not.toContain(CURSOR_MARKER);
-  });
 });

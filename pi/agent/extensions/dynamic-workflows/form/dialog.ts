@@ -10,12 +10,12 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 import type { ResolvedWorkflow, RoleDefinition, WorkflowDefinition } from "../types.ts";
-import { MAX_CONTEXT_BYTES_PER_AGENT, MAX_CONTEXT_FILES_PER_AGENT, parseWorkflow } from "../workflow.ts";
+import { MAX_CONTEXT_BYTES_PER_AGENT, MAX_CONTEXT_FILES_PER_AGENT } from "../workflow.ts";
 import { renderWorkflowGraph } from "./graph.ts";
 import { dialogColumnWidths, DialogComponent, layoutDialogColumns } from "./render.ts";
 import { serializeWorkflow } from "./serialize.ts";
 
-type Mode = "confirm" | "suggest" | "raw";
+type Mode = "confirm" | "suggest";
 
 export const WORKFLOW_DIALOG_MAX_HEIGHT = "75%" as const;
 const WORKFLOW_DIALOG_HEIGHT_RATIO = 0.75;
@@ -23,12 +23,13 @@ const WORKFLOW_DIALOG_HEIGHT_RATIO = 0.75;
 export type WorkflowReviewResult =
   | { action: "run"; plan: ResolvedWorkflow }
   | { action: "suggest"; suggestion: string }
+  | { action: "invalid"; error: string }
   | { action: "cancel" };
 
 export interface WorkflowDialogOptions {
   tui: TUI;
   theme: Theme;
-  source: string;
+  plan: ResolvedWorkflow;
   roles: ReadonlyMap<string, RoleDefinition>;
   resolveSource: (source: string) => ResolvedWorkflow;
   onDone: (result: WorkflowReviewResult | undefined) => void;
@@ -105,12 +106,10 @@ function renderAgentTable(theme: Theme, width: number, fields: AgentTableField[]
 
 /** Read-only workflow confirmation with model-mediated free-text revision. */
 export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResult> {
-  private mode: Mode = "raw";
-  private definition?: WorkflowDefinition;
-  private canonicalSource?: string;
-  private plan?: ResolvedWorkflow;
-  private parseError?: string;
-  private resolutionError?: string;
+  private mode: Mode = "confirm";
+  private readonly definition: WorkflowDefinition;
+  private readonly canonicalSource: string;
+  private readonly plan: ResolvedWorkflow;
   private scroll = 0;
   private readonly editor: Editor;
   private readonly roles: ReadonlyMap<string, RoleDefinition>;
@@ -126,11 +125,13 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
     this.editor = new Editor(options.tui, editorTheme(options.theme), { paddingX: 1 });
     this.editor.onChange = () => this.changed();
     this.editor.onSubmit = (value) => this.submitEditor(value);
-    this.loadSource(options.source);
+    this.definition = options.plan.definition;
+    this.canonicalSource = serializeWorkflow(this.definition);
+    this.plan = options.plan;
   }
 
   protected override propagateFocus(focused: boolean): void {
-    this.editor.focused = focused && (this.mode === "raw" || this.mode === "suggest");
+    this.editor.focused = focused && this.mode === "suggest";
   }
 
   override invalidate(): void {
@@ -138,42 +139,7 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
     this.editor.invalidate();
   }
 
-  private loadSource(source: string): void {
-    try {
-      this.definition = parseWorkflow(source);
-      this.canonicalSource = serializeWorkflow(this.definition);
-      this.parseError = undefined;
-      this.mode = "confirm";
-      this.scroll = 0;
-      this.resolveCanonicalSource();
-    } catch (error) {
-      this.definition = undefined;
-      this.canonicalSource = undefined;
-      this.plan = undefined;
-      this.resolutionError = undefined;
-      this.parseError = error instanceof Error ? error.message : String(error);
-      this.mode = "raw";
-      this.editor.setText(source);
-    }
-  }
-
-  private resolveCanonicalSource(): void {
-    this.plan = undefined;
-    this.resolutionError = undefined;
-    if (!this.canonicalSource) return;
-    try {
-      this.plan = this.resolveSource(this.canonicalSource);
-    } catch (error) {
-      this.resolutionError = error instanceof Error ? error.message : String(error);
-    }
-  }
-
   private submitEditor(value: string): void {
-    if (this.mode === "raw") {
-      this.loadSource(value);
-      this.changed();
-      return;
-    }
     if (this.mode !== "suggest" || !value.trim()) return;
     this.done({ action: "suggest", suggestion: value });
   }
@@ -185,24 +151,18 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
   }
 
   private run(): void {
-    if (!this.canonicalSource || !this.plan) return;
     try {
       const plan = this.resolveSource(this.canonicalSource);
       this.done({ action: "run", plan });
     } catch (error) {
-      this.plan = undefined;
-      this.resolutionError = error instanceof Error ? error.message : String(error);
-      this.changed();
+      this.done({
+        action: "invalid",
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   override handleInput(data: string): void {
-    if (this.mode === "raw") {
-      if (matchesKey(data, Key.escape)) { this.done({ action: "cancel" }); return; }
-      this.editor.handleInput(data);
-      this.changed();
-      return;
-    }
     if (this.mode === "suggest") {
       if (matchesKey(data, Key.escape)) {
         this.mode = "confirm";
@@ -221,8 +181,7 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
   }
 
   private agentLines(width: number): string[] {
-    if (!this.definition) return [];
-    const resolved = new Map(this.plan?.agents.map((agent) => [agent.id, agent]) ?? []);
+    const resolved = new Map(this.plan.agents.map((agent) => [agent.id, agent]));
     const lines: string[] = [];
     for (const agent of this.definition.agents) {
       const role = this.roles.get(agent.role);
@@ -253,7 +212,6 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
   }
 
   private confirmationBody(width: number): string[] {
-    if (!this.definition) return [];
     const columns = dialogColumnWidths(width);
     const detailWidth = columns.left;
     const graphWidth = columns.right;
@@ -268,16 +226,10 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
       ...this.agentLines(detailWidth),
     ];
     const content = layoutDialogColumns(details, graph, width);
-    const validation = this.plan
-      ? [this.theme.fg("success", "✓ Workflow and resources validate")]
-      : [
-          this.theme.fg("warning", "Run is disabled until the proposal validates."),
-          this.theme.fg("error", this.resolutionError ?? "Workflow could not be resolved"),
-        ];
     return [
       this.theme.fg("text", this.theme.bold(this.definition.name)),
       ...(this.definition.description ? [this.theme.fg("muted", compact(this.definition.description))] : []),
-      ...validation,
+      this.theme.fg("success", "✓ Workflow and resources validate"),
       "",
       ...content,
       this.theme.fg("dim", `Context limit: ${MAX_CONTEXT_FILES_PER_AGENT} files / ${MAX_CONTEXT_BYTES_PER_AGENT} bytes per agent`),
@@ -298,19 +250,6 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
   }
 
   protected override renderDialog(width: number): string[] {
-    if (this.mode === "raw") {
-      const body = [
-        this.theme.fg("dim", "Edit static source, then Enter to parse. Shift+Enter inserts a line."),
-        ...(this.parseError ? ["", this.theme.fg("error", this.parseError)] : []),
-        "",
-        ...this.editor.render(Math.max(1, width - 2)).map((line) => ` ${line}`),
-      ];
-      return this.viewport(
-        [this.theme.fg("accent", this.theme.bold("Raw source recovery")), ""],
-        body,
-        ["", this.theme.fg("dim", "Enter parse • Esc cancel")],
-      );
-    }
     if (this.mode === "suggest") {
       return this.viewport(
         [this.theme.fg("accent", this.theme.bold("Suggest a workflow revision")), ""],

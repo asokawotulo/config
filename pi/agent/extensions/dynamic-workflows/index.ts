@@ -53,17 +53,25 @@ function validateResources(plan: ResolvedWorkflow, pi: ExtensionAPI, ctx: Extens
 async function review(source: string, pi: ExtensionAPI, ctx: ExtensionContext): Promise<WorkflowReviewResult> {
   if (ctx.mode !== "tui") throw new Error("Dynamic workflows require interactive TUI mode for confirmation");
   const loadedRoles = loadRoles();
+  const resolveSource = (candidate: string) => {
+    const plan = resolveWorkflow(candidate, loadedRoles.roles, ctx.cwd, loadedRoles.diagnostics);
+    validateResources(plan, pi, ctx);
+    return plan;
+  };
+  let plan: ResolvedWorkflow;
+  try {
+    plan = resolveSource(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Dynamic workflow validation failed: ${message}`, { cause: error });
+  }
   const result = await showDialog<WorkflowReviewResult | undefined>(pi, ctx, (tui, theme, _keybindings, done) =>
     new WorkflowDialogComponent({
       tui,
       theme,
-      source,
+      plan,
       roles: loadedRoles.roles,
-      resolveSource: (canonicalSource) => {
-        const plan = resolveWorkflow(canonicalSource, loadedRoles.roles, ctx.cwd, loadedRoles.diagnostics);
-        validateResources(plan, pi, ctx);
-        return plan;
-      },
+      resolveSource,
       onDone: done,
     }),
     {
@@ -296,9 +304,13 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
       "The script must be exactly `export const workflow = { name, description?, agents }` using static literals.",
       "Each agent requires id, role, prompt, and dependsOn. Optional contextFiles preload approved worktree files; tools and skills may only narrow its role.",
       "Declare every agent up front. Agents in the same dependency wave run in parallel. Use {{agents.ID.output}} in dependent prompts.",
+      "Validation failures are returned as tool errors; correct the complete workflow and call dynamic_workflow again.",
     ].join(" "),
     promptSnippet: "Propose an editable, statically declared DAG of isolated Pi subagents",
-    promptGuidelines: ["Use dynamic_workflow only when the user requests a multi-agent workflow or a task clearly benefits from parallel specialized agents."],
+    promptGuidelines: [
+      "Use dynamic_workflow only when the user requests a multi-agent workflow or a task clearly benefits from parallel specialized agents.",
+      "When dynamic_workflow returns a validation error, correct the complete workflow and call dynamic_workflow again.",
+    ],
     parameters: Type.Object({ script: Type.String({ description: "Static JavaScript workflow definition" }) }),
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -314,6 +326,9 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
           }],
           details: { suggested: true, suggestion: reviewResult.suggestion },
         };
+      }
+      if (reviewResult.action === "invalid") {
+        throw new Error(`Dynamic workflow validation failed: ${reviewResult.error}`);
       }
       const plan = reviewResult.plan;
 
