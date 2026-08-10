@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type {
+  ContextEvent,
+  ExtensionContext,
+  Theme,
+} from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type Editor } from "@earendil-works/pi-tui";
 import { renderQuestionnaire } from "./render.ts";
 import {
@@ -7,6 +11,13 @@ import {
   createEmptyAnswer,
   formatResult,
 } from "./results.ts";
+import {
+  applyAskUserRevisions,
+  ASK_USER_REVISION_TYPE,
+  collectAskUserRevisionResults,
+  findAskUserRevision,
+  questionResultsToAnswerStates,
+} from "./revision.ts";
 import { validateQuestions } from "./schema.ts";
 import { DialogSettler, QuestionnaireState } from "./state.ts";
 import type { DialogResult, Question } from "./types.ts";
@@ -39,6 +50,17 @@ function moveToCustom(state: QuestionnaireState) {
 }
 
 describe("questionnaire interactions", () => {
+  test("prefills cloned answers for revision", () => {
+    const initial = [{ selected: new Set([1]), custom: "Existing" }];
+    const state = new QuestionnaireState([question({ type: "multiple" })], initial);
+
+    initial[0]?.selected.clear();
+    if (initial[0]) initial[0].custom = "Changed";
+
+    expect(state.answers[0]?.selected).toEqual(new Set([1]));
+    expect(state.answers[0]?.custom).toBe("Existing");
+  });
+
   test("single-choice Enter selects and advances", () => {
     const state = new QuestionnaireState(twoQuestions());
 
@@ -246,6 +268,254 @@ describe("ask_user results", () => {
     expect(formatResult("submitted", [result])).toContain(
       "  (written) First line\n            Second line",
     );
+  });
+});
+
+describe("ask_user tree revision", () => {
+  test("hydrates stored answers by question id and ignores invalid indices", () => {
+    const questions = twoQuestions();
+    const states = questionResultsToAnswerStates(questions, [
+      {
+        id: "shell",
+        question: "Which shell should be used?",
+        type: "single",
+        answered: true,
+        answers: [
+          { kind: "option", label: "Fish", optionIndex: 2 },
+          { kind: "option", label: "Invalid", optionIndex: 99 },
+          { kind: "custom", label: "Nushell" },
+        ],
+      },
+    ]);
+
+    expect(states[0]).toEqual(createEmptyAnswer());
+    expect(states[1]?.selected).toEqual(new Set([1]));
+    expect(states[1]?.custom).toBe("Nushell");
+  });
+
+  test("recovers questions from the matching ancestor tool call", () => {
+    const questions = twoQuestions();
+    const toolCallId = "ask-call";
+    const assistant = {
+      type: "message",
+      id: "assistant",
+      parentId: null,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: toolCallId,
+            name: "ask_user",
+            arguments: { questions },
+          },
+        ],
+      },
+    };
+    const intervening = {
+      type: "message",
+      id: "other-result",
+      parentId: "assistant",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      message: { role: "toolResult", toolName: "read", toolCallId: "read-call" },
+    };
+    const target = {
+      type: "message",
+      id: "ask-result",
+      parentId: "other-result",
+      timestamp: "2026-01-01T00:00:02.000Z",
+      message: {
+        role: "toolResult",
+        toolName: "ask_user",
+        toolCallId,
+        details: {
+          status: "submitted",
+          questions: [
+            {
+              id: "editor",
+              question: "Which editor should be used?",
+              type: "single",
+              answered: true,
+              answers: [{ kind: "option", label: "Emacs", optionIndex: 2 }],
+            },
+          ],
+        },
+      },
+    };
+    const entries = [assistant, intervening, target];
+    const sessionManager = {
+      getEntry: (id: string) => entries.find((entry) => entry.id === id),
+      getBranch: () => entries,
+    } as unknown as ExtensionContext["sessionManager"];
+
+    const revision = findAskUserRevision(sessionManager, target.id);
+
+    expect(revision?.questions).toEqual(questions);
+    expect(revision?.initialAnswers[0]?.selected).toEqual(new Set([1]));
+    expect(revision?.initialAnswers[1]).toEqual(createEmptyAnswer());
+  });
+
+  test("replaces the original answer and removes the applied revision marker", () => {
+    const revisedQuestion = {
+      id: "tree_revision_test",
+      question: "Which option?",
+      type: "single" as const,
+      answered: true,
+      answers: [{ kind: "option" as const, label: "Option B", optionIndex: 2 }],
+    };
+    const messages = [
+      {
+        role: "assistant",
+        content: [{
+          type: "toolCall",
+          id: "ask-call",
+          name: "ask_user",
+          arguments: { questions: [] },
+        }],
+      },
+      {
+        role: "toolResult",
+        toolCallId: "ask-call",
+        toolName: "ask_user",
+        content: [{ type: "text", text: "Option A" }],
+        details: {
+          status: "submitted",
+          questions: [{ ...revisedQuestion, answers: [
+            { kind: "option", label: "Option A", optionIndex: 1 },
+          ] }],
+        },
+        isError: false,
+      },
+      {
+        role: "custom",
+        customType: ASK_USER_REVISION_TYPE,
+        content: "Revised to Option B",
+        display: true,
+        details: {
+          version: 1,
+          toolCallId: "ask-call",
+          result: { status: "submitted", questions: [revisedQuestion] },
+        },
+      },
+    ] as unknown as ContextEvent["messages"];
+
+    const transformed = applyAskUserRevisions(messages);
+    const serialized = JSON.stringify(transformed);
+
+    expect(transformed).toHaveLength(2);
+    expect(serialized).not.toContain("Option A");
+    expect(serialized).not.toContain(ASK_USER_REVISION_TYPE);
+    expect(serialized).toContain("Option B");
+    expect(transformed[1]).toMatchObject({
+      role: "toolResult",
+      toolCallId: "ask-call",
+      toolName: "ask_user",
+      isError: false,
+    });
+  });
+
+  test("uses the latest matched revision and preserves unmatched markers", () => {
+    const result = {
+      role: "toolResult",
+      toolCallId: "ask-call",
+      toolName: "ask_user",
+      content: [{ type: "text", text: "Original" }],
+      isError: false,
+    };
+    const marker = (toolCallId: string, label: string) => ({
+      role: "custom",
+      customType: ASK_USER_REVISION_TYPE,
+      content: `Revised to ${label}`,
+      display: true,
+      details: {
+        version: 1,
+        toolCallId,
+        result: {
+          status: "submitted",
+          questions: [{
+            id: "choice",
+            question: "Choose",
+            type: "single",
+            answered: true,
+            answers: [{ kind: "option", label, optionIndex: 1 }],
+          }],
+        },
+      },
+    });
+    const messages = [
+      result,
+      marker("ask-call", "First revision"),
+      marker("ask-call", "Latest revision"),
+      marker("missing-call", "Unmatched revision"),
+    ] as unknown as ContextEvent["messages"];
+
+    const transformed = applyAskUserRevisions(messages);
+    const serialized = JSON.stringify(transformed);
+
+    expect(serialized).not.toContain("First revision");
+    expect(serialized).toContain("Latest revision");
+    expect(serialized).toContain("Unmatched revision");
+    expect(transformed).toHaveLength(2);
+  });
+
+  test("hydrates the latest visual projection from the active branch", () => {
+    const revisionEntry = (id: string, label: string) => ({
+      type: "custom_message",
+      id,
+      parentId: null,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      customType: ASK_USER_REVISION_TYPE,
+      content: `Revised to ${label}`,
+      display: false,
+      details: {
+        version: 1,
+        toolCallId: "ask-call",
+        result: {
+          status: "submitted",
+          questions: [{
+            id: "choice",
+            question: "Choose",
+            type: "single",
+            answered: true,
+            answers: [{ kind: "option", label, optionIndex: 1 }],
+          }],
+        },
+      },
+    });
+    const sessionManager = {
+      getBranch: () => [
+        revisionEntry("first", "First revision"),
+        revisionEntry("latest", "Latest revision"),
+      ],
+    } as unknown as ExtensionContext["sessionManager"];
+
+    const projections = collectAskUserRevisionResults(sessionManager);
+
+    expect(projections.get("ask-call")?.questions[0]?.answers[0]?.label).toBe(
+      "Latest revision",
+    );
+  });
+
+  test("ignores unrelated and malformed stored tool events", () => {
+    const entries = [
+      {
+        type: "message",
+        id: "result",
+        message: {
+          role: "toolResult",
+          toolName: "read",
+          toolCallId: "call",
+        },
+      },
+    ];
+    const sessionManager = {
+      getEntry: (id: string) => entries.find((entry) => entry.id === id),
+      getBranch: () => entries,
+    } as unknown as ExtensionContext["sessionManager"];
+
+    expect(findAskUserRevision(sessionManager, "result")).toBeUndefined();
+    expect(findAskUserRevision(sessionManager, "missing")).toBeUndefined();
   });
 });
 

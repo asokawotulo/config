@@ -19,7 +19,12 @@ import {
 } from "../../shared/ui/index.ts";
 import { renderQuestionnaire } from "./render.ts";
 import { DialogSettler, QuestionnaireState } from "./state.ts";
-import type { DialogResult, Question, QuestionnaireCommand } from "./types.ts";
+import type {
+  AnswerState,
+  DialogResult,
+  Question,
+  QuestionnaireCommand,
+} from "./types.ts";
 
 class QuestionnaireDialog extends DialogComponent implements Focusable {
   focused = false;
@@ -35,9 +40,10 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
     questions: Question[],
     signal: AbortSignal | undefined,
     done: (result: DialogResult) => void,
+    initialAnswers: AnswerState[] = [],
   ) {
     super(tui, theme, keybindings);
-    this.state = new QuestionnaireState(questions);
+    this.state = new QuestionnaireState(questions, initialAnswers);
     this.settler = new DialogSettler(signal, done);
 
     const editorTheme: EditorTheme = {
@@ -142,6 +148,7 @@ export function showQuestionnaire(
   ctx: ExtensionContext,
   questions: Question[],
   signal?: AbortSignal,
+  initialAnswers: AnswerState[] = [],
 ) {
   return showDialog<DialogResult>(
     pi,
@@ -154,6 +161,7 @@ export function showQuestionnaire(
         questions,
         signal,
         done,
+        initialAnswers,
       ),
     {
       notification: {

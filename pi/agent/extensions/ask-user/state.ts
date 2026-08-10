@@ -14,8 +14,16 @@ export class QuestionnaireState {
   screen = 0;
   editQuestionIndex?: number;
 
-  constructor(readonly questions: Question[]) {
-    this.answers = questions.map(createEmptyAnswer);
+  constructor(
+    readonly questions: Question[],
+    initialAnswers: AnswerState[] = [],
+  ) {
+    this.answers = questions.map((_, index) => {
+      const initial = initialAnswers[index];
+      return initial
+        ? { selected: new Set(initial.selected), custom: initial.custom }
+        : createEmptyAnswer();
+    });
     this.cursors = questions.map(() => 0);
   }
 
