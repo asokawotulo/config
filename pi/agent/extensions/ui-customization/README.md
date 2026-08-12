@@ -10,7 +10,7 @@ The panel displays these sections in order:
 
 1. Directory and Git branch/worktree
 2. Session name
-3. Context usage and Total/Main/Subagent cost
+3. Context usage, latest prompt cache hit rate, and Total/Main/Subagent cost
 4. Model and thinking level
 5. Current workflows and agent status
 
@@ -32,7 +32,7 @@ Settled `dynamic_workflow` tool-result usage is the persisted subagent source of
 
 ## Context and cost
 
-Context usage is muted at 50% or below (and when unknown), accented above 50% through 80%, and shown as an error above 80%. Cost is partitioned into Total, Main, and Subagents when panel height permits.
+Context usage is muted at 50% or below (and when unknown), accented above 50% through 80%, and shown as an error above 80%. When Pi reports cache activity, the latest assistant prompt's cache hit rate appears between context usage and total cost. Cost is partitioned into Total, Main, and Subagents when panel height permits.
 
 ## Compatibility and lifecycle
 

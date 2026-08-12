@@ -20,6 +20,7 @@ import {
 import { resolveGitMetadata } from "./git-metadata.ts";
 import {
   buildSidebarMetadata,
+  calculateLatestCacheHitRate,
   formatDirectory,
   formatTokenCount,
   type SidebarMetadata,
@@ -84,6 +85,7 @@ function widgetMetadata(
     contextTokens: "0",
     contextWindow: "272K",
     contextPercent: 0,
+    latestCacheHitRate: 75,
     cost: 1.2345,
     mainCost: 1,
     subagentCost: 0.2345,
@@ -207,6 +209,44 @@ describe("status widget metadata", () => {
     expect(contextUsageColor(50.01)).toBe("accent");
     expect(contextUsageColor(80)).toBe("accent");
     expect(contextUsageColor(80.01)).toBe("error");
+  });
+
+  test("uses the latest assistant prompt cache hit rate", () => {
+    const entries = [
+      entry({
+        type: "message",
+        message: {
+          role: "assistant",
+          usage: { ...usage(0), input: 20, cacheRead: 80 },
+        },
+      }),
+      entry({
+        type: "message",
+        message: {
+          role: "assistant",
+          usage: { ...usage(0), input: 25, cacheRead: 75 },
+        },
+      }),
+    ];
+
+    expect(calculateLatestCacheHitRate(entries)).toBe(75);
+    expect(
+      calculateLatestCacheHitRate([
+        ...entries,
+        entry({
+          type: "message",
+          message: { role: "assistant", usage: { ...usage(0), input: 100 } },
+        }),
+      ]),
+    ).toBe(0);
+    expect(
+      calculateLatestCacheHitRate([
+        entry({
+          type: "message",
+          message: { role: "assistant", usage: { ...usage(0), input: 100 } },
+        }),
+      ]),
+    ).toBeNull();
   });
 
   test("carries the raw context percentage", () => {
@@ -348,7 +388,14 @@ describe("SidebarComponent", () => {
     expect(sectionRow("Model")).toBeLessThan(sectionRow("Workflow"));
     expect(text).toContain("~/config");
     expect(text).toContain("0 / 272K  0.00%");
+    expect(text).toContain("Cache hit 75.0%");
     expect(text).toContain("Total $1.234");
+    expect(text.indexOf("0 / 272K")).toBeLessThan(
+      text.indexOf("Cache hit 75.0%"),
+    );
+    expect(text.indexOf("Cache hit 75.0%")).toBeLessThan(
+      text.indexOf("Total $1.234"),
+    );
     expect(text).not.toContain("Ctrl+B hide");
     expect(text).not.toContain("/workflows inspect");
     expect(text).not.toContain("─");
@@ -356,6 +403,15 @@ describe("SidebarComponent", () => {
     expect(lines.every((line) => visibleWidth(line) === SIDEBAR_WIDTH)).toBe(
       true,
     );
+
+    const withoutCacheRate = new SidebarComponent(
+      () => ({ ...widgetMetadata(), latestCacheHitRate: null }),
+      identityTheme,
+      () => 34,
+    )
+      .render(SIDEBAR_WIDTH)
+      .join("\n");
+    expect(withoutCacheRate).not.toContain("Cache hit");
   });
 
   test("shows workflow agents when height permits and compacts on short terminals", () => {

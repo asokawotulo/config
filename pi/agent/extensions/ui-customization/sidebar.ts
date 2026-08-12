@@ -54,6 +54,16 @@ function formatCost(cost: number): string {
   return `$${(Number.isFinite(cost) && cost >= 0 ? cost : 0).toFixed(3)}`;
 }
 
+function cacheHitRateRows(rate: number | null): SidebarRow[] {
+  if (rate === null || !Number.isFinite(rate)) return [];
+  return [
+    {
+      text: `Cache hit ${Math.max(0, Math.min(100, rate)).toFixed(1)}%`,
+      optionalPriority: 50,
+    },
+  ];
+}
+
 function agentAppearance(status: DynamicWorkflowAgentStatus): {
   symbol: string;
   color: SidebarColor;
@@ -158,6 +168,7 @@ function expandedRows(metadata: SidebarMetadata): SidebarRow[] {
       text: `${metadata.contextTokens} / ${metadata.contextWindow}  ${formatContextPercent(metadata.contextPercent)}`,
       color: contextColor,
     },
+    ...cacheHitRateRows(metadata.latestCacheHitRate),
     { text: `Total ${formatCost(metadata.cost)}` },
     { text: `Main ${formatCost(metadata.mainCost)}`, optionalPriority: 50 },
     {
