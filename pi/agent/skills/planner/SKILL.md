@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Investigates coding tasks and produces implementation-ready, read-only plans with responsive side-by-side Before/After diff snippets. Use when the user asks for an implementation plan, technical design, change proposal, or investigation before coding.
+description: Investigates coding tasks and produces implementation-ready, read-only plans with responsive code and contextual diff snippets. Use when the user asks for an implementation plan, technical design, change proposal, or investigation before coding.
 ---
 
 # Planner
@@ -36,7 +36,7 @@ For every task, specify:
 - Task ID and objective
 - Relevant files and symbols
 - Expected behavior
-- One or more concise Before/After snippets
+- One or more concise diff snippets using the representation that best explains the change
 - Acceptance criteria
 - Dependencies
 - Focused verification
@@ -45,9 +45,11 @@ For every task, specify:
 
 Identify shared files, contracts, schemas, migrations, manifests, generated files, and lockfiles that require serialized work.
 
-## Before/After Snippets
+## Change Context Snippets
 
-Before drafting the plan, find and load the skill named `diff`. Follow its standard format, rules, and examples for every Before/After snippet.
+Before drafting the plan, find and load the skill named `diff`. Follow its standard format, rules, and examples for every snippet.
+
+Use code Before/After diffs when implementation details provide the clearest context. Optionally use or supplement them with call-tree, state or control-flow, and file-tree diffs when those better explain architectural, behavioral, or structural changes.
 
 ## Required Output
 

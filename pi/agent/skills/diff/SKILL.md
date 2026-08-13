@@ -1,11 +1,11 @@
 ---
 name: diff
-description: Formats focused Before/After code changes as responsive diff fences. Use when presenting proposed changes, implementation plans, or concise code comparisons.
+description: Formats focused code, call-tree, control-flow, and file-tree changes as responsive diff fences. Use when presenting proposed changes, implementation plans, or concise comparisons.
 ---
 
 # Diff
 
-Format Before/After comparisons as focused unified diff fences. Pi renders these as responsive side-by-side panes when space permits and falls back to unified diff rendering at narrow widths.
+Format code and contextual comparisons as focused unified diff fences. Pi renders these as responsive side-by-side panes when space permits and falls back to unified diff rendering at narrow widths.
 
 ## Standard Format
 
@@ -114,5 +114,45 @@ Use enough existing context to locate a multi-line change while keeping the exce
 +
 +  return response.json() as Promise<ApiResponse>;
  }
+```
+````
+
+### Call stack or call tree
+
+Use a call-tree diff to show inserted, removed, or reordered invocations when the execution structure provides more context than a code excerpt:
+
+````markdown
+```diff
+ request()
+-└── loadUserFromDatabase()
++└── loadUser()
++    ├── readUserCache()
++    └── loadUserFromDatabase()
+```
+````
+
+### State or control flow
+
+Use a state or control-flow diff to make changed transitions, branches, retries, or terminal states explicit:
+
+````markdown
+```diff
+-loading → success
++loading ─┬→ success
++         └→ error → retry
+```
+````
+
+### File tree
+
+Use a file-tree diff to show files or directories being added, removed, moved, or regrouped:
+
+````markdown
+```diff
+ src/
+-├── client.ts
++├── api/
++│   └── client.ts
+ └── index.ts
 ```
 ````
