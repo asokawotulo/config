@@ -36,7 +36,6 @@
       "iina"
       "imageoptim"
       "karabiner-elements"
-      "notion"
       "obsidian"
       "protonvpn"
       "raycast"
