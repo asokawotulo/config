@@ -11,7 +11,11 @@ import {
 import { SIDEBAR_WIDTH } from "./sidebar.ts";
 
 export const SUPPORTED_PI_VERSION = "0.84.0";
-export const SUPPORTED_PI_VERSIONS = new Set(["0.84.0", "0.84.1"]);
+export const SUPPORTED_PI_VERSIONS = new Set([
+  "0.84.0",
+  "0.84.1",
+  "0.84.2",
+]);
 export const SIDEBAR_MIN_TERMINAL_WIDTH = 100;
 
 interface RuntimeStackEntry {

@@ -1,6 +1,6 @@
 # Tool diffs
 
-Overrides Pi 0.84.1's built-in `edit` and `write` tools so successful file mutations render with responsive Before/After panes in the interactive TUI.
+Overrides Pi 0.84.1–0.84.2's built-in `edit` and `write` tools so successful file mutations render with responsive Before/After panes in the interactive TUI.
 
 Each override starts from Pi's exported built-in definition, retaining its parameters, argument preparation, prompt metadata, and render shell while replacing only execution and the call/result renderers. Execution still delegates to the built-in definitions: `edit` uses Pi's persisted unified patch, while `write` snapshots the target immediately before writing with the built-in per-file mutation queue held and persists a generated patch for transcript reloads.
 

@@ -157,7 +157,7 @@ describe("tool diff overrides", () => {
     expect(tools.map((tool) => tool.name)).toEqual(["edit", "write"]);
   });
 
-  test("retains the Pi 0.84.1 built-in contracts outside execution and rendering", async () => {
+  test("retains the Pi 0.84.2 built-in contracts outside execution and rendering", async () => {
     const cwd = await makeTemporaryDirectory();
     const tools = await loadTools(cwd);
 

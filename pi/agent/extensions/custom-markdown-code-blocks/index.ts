@@ -3,9 +3,9 @@ import { diffCodeBlockRenderer } from "./diff/index.ts";
 import { installCustomMarkdownCodeBlocks } from "./markdown-renderer.ts";
 
 /**
- * Transitional global Markdown enhancement for Pi 0.83 and 0.84.1.
+ * Transitional global Markdown enhancement for Pi 0.83 and 0.84.1–0.84.2.
  *
- * Pi 0.84.1 exposes string-only Markdown transformers, but not a custom
+ * Pi 0.84.1–0.84.2 exposes string-only Markdown transformers, but not a custom
  * code-block component hook, so this still patches the shared Markdown
  * component. The Symbol-backed state makes extension reloads idempotent.
  */

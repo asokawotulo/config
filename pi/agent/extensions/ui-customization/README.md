@@ -1,6 +1,6 @@
 # UI customization
 
-> **Compatibility:** the fullscreen adapter supports the shared `@earendil-works/pi-coding-agent` **0.84.0–0.84.1** fullscreen layout shape; 0.84.0 is the minimum supported host version.
+> **Compatibility:** the fullscreen adapter supports the shared `@earendil-works/pi-coding-agent` **0.84.0–0.84.2** fullscreen layout shape; 0.84.0 is the minimum supported host version.
 
 This extension provides a 50-column session inspector that is visible by default. Press `Ctrl+B` or run `/sidebar` to hide or show it.
 
@@ -36,7 +36,7 @@ Context usage is muted at 50% or below (and when unknown), accented above 50% th
 
 ## Compatibility and lifecycle
 
-Pi does not expose a public API for replacing only the fullscreen transcript region or observing renderer changes. The local adapter therefore validates the shared Pi 0.84.0–0.84.1 fullscreen `VStack`, transcript `ScrollView`, six-row dock, synchronized stack arrays, renderer mode, and package version before changing the tree. On a mismatch it leaves Pi's layout untouched and warns once.
+Pi does not expose a public API for replacing only the fullscreen transcript region or observing renderer changes. The local adapter therefore validates the shared Pi 0.84.0–0.84.2 fullscreen `VStack`, transcript `ScrollView`, six-row dock, synchronized stack arrays, renderer mode, and package version before changing the tree. On a mismatch it leaves Pi's layout untouched and warns once.
 
 The adapter mutates only the canonical root's transcript and dock component slots. It updates both private stack arrays, restores only slots it still owns, and can restore the canonical root while regular mode is active. The canonical mutation survives regular/fullscreen renderer remounts; the empty footer also retries installation when a fullscreen renderer first appears.
 
