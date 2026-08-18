@@ -8,6 +8,7 @@
     brews = [
       # Development tools
       "anomalyco/tap/opencode" # OpenCode is kept here because updates happen frequently, and we want to keep it up to date independently from nixpkgs.
+      "docker-credential-helper-ecr"
       "pi-coding-agent"
       "rustup"
 
