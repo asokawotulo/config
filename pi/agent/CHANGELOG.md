@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-20 23:31
+### Added
+- ask user: added multiline Markdown option descriptions with a responsive master-detail layout and scrollable detail pane
+
 ## 2026-08-18 12:40
 ### Added
 - search tools: added pi-fff in override mode to replace Pi's default find and grep tools with frecency and history support

@@ -1,4 +1,4 @@
-import type { Editor } from "@earendil-works/pi-tui";
+import type { Editor, MarkdownTheme } from "@earendil-works/pi-tui";
 
 export interface QuestionOption {
   label: string;
@@ -75,6 +75,22 @@ export interface RenderState {
   screen: number;
   editQuestionIndex?: number;
   editor: Editor;
+  markdownTheme: MarkdownTheme;
+  maxFrameRows?: number;
+  detailScroll?: number;
+}
+
+export interface DetailViewport {
+  top: number;
+  maxTop: number;
+  pageSize: number;
+  overflow: boolean;
+}
+
+export interface QuestionnaireRenderView {
+  lines: string[];
+  masterDetail: boolean;
+  detailViewport?: DetailViewport;
 }
 
 export interface QuestionTab {

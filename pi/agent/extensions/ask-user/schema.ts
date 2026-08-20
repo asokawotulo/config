@@ -10,7 +10,8 @@ const OptionSchema = Type.Object({
   label: Type.String({ description: "Short display label for this option" }),
   description: Type.Optional(
     Type.String({
-      description: "Optional one-line explanation shown under the option",
+      description:
+        "Optional multiline Markdown explanation shown under the option",
     }),
   ),
 });

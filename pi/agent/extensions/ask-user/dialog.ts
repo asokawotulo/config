@@ -1,8 +1,9 @@
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-  KeybindingsManager,
-  Theme,
+import {
+  getMarkdownTheme,
+  type ExtensionAPI,
+  type ExtensionContext,
+  type KeybindingsManager,
+  type Theme,
 } from "@earendil-works/pi-coding-agent";
 import {
   Editor,
@@ -17,10 +18,11 @@ import {
   DialogComponent,
   showDialog,
 } from "../../shared/ui/index.ts";
-import { renderQuestionnaire } from "./render.ts";
+import { renderQuestionnaireView } from "./render.ts";
 import { DialogSettler, QuestionnaireState } from "./state.ts";
 import type {
   AnswerState,
+  DetailViewport,
   DialogResult,
   Question,
   QuestionnaireCommand,
@@ -32,6 +34,9 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
   private readonly editor: Editor;
   private readonly state: QuestionnaireState;
   private readonly settler: DialogSettler;
+  private readonly maxFrameRows: number;
+  private detailScroll = 0;
+  private detailViewport?: DetailViewport;
 
   constructor(
     tui: TUI,
@@ -45,6 +50,11 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
     super(tui, theme, keybindings);
     this.state = new QuestionnaireState(questions, initialAnswers);
     this.settler = new DialogSettler(signal, done);
+    const terminalRows = Math.max(1, tui.terminal?.rows ?? 24);
+    this.maxFrameRows = Math.max(
+      1,
+      Math.min(Math.floor(terminalRows * 0.9), Math.max(1, terminalRows - 2)),
+    );
 
     const editorTheme: EditorTheme = {
       borderColor: (text) => theme.fg("accent", text),
@@ -90,6 +100,7 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
     if (this.state.editQuestionIndex !== undefined) {
       if (this.matchesBinding(data, "tui.select.cancel")) {
         this.state.handle("escape");
+        this.detailScroll = 0;
         this.closeEditor();
         this.refresh();
         return;
@@ -99,9 +110,31 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
       return;
     }
 
+    if (matchesKey(data, Key.pageUp) || matchesKey(data, Key.pageDown)) {
+      const viewport = this.detailViewport;
+      if (!viewport) return;
+      const delta = matchesKey(data, Key.pageUp)
+        ? -viewport.pageSize
+        : viewport.pageSize;
+      this.detailScroll = Math.max(
+        0,
+        Math.min(viewport.maxTop, viewport.top + delta),
+      );
+      this.refresh();
+      return;
+    }
+
     const command = this.commandFor(data);
     if (!command) return;
+    const previousScreen = this.state.screen;
+    const previousCursor = this.state.cursors[previousScreen];
     const transition = this.state.handle(command);
+    if (
+      previousScreen !== this.state.screen ||
+      previousCursor !== this.state.cursors[this.state.screen]
+    ) {
+      this.detailScroll = 0;
+    }
     if (transition === "submitted") {
       this.settler.finish({ kind: "submitted", answers: this.state.answers });
       return;
@@ -111,6 +144,7 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
       return;
     }
     if (transition === "open-editor") {
+      this.detailScroll = 0;
       this.openEditor();
       return;
     }
@@ -118,7 +152,7 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
   }
 
   protected renderContent(width: number) {
-    return renderQuestionnaire(
+    const rendered = renderQuestionnaireView(
       {
         questions: this.state.questions,
         answers: this.state.answers,
@@ -126,11 +160,16 @@ class QuestionnaireDialog extends DialogComponent implements Focusable {
         screen: this.state.screen,
         editQuestionIndex: this.state.editQuestionIndex,
         editor: this.editor,
+        markdownTheme: getMarkdownTheme(),
+        maxFrameRows: this.maxFrameRows,
+        detailScroll: this.detailScroll,
       },
       this.theme,
       width,
       this.keybindings,
     );
+    this.detailViewport = rendered.detailViewport;
+    return rendered.lines;
   }
 
   override invalidate() {
@@ -171,7 +210,7 @@ export function showQuestionnaire(
           : `${questions.length} questions require your input`,
       },
       overlayOptions: centeredDialogOverlay({
-        width: "75%",
+        width: "90%",
         minWidth: 40,
         maxHeight: "90%",
       }),

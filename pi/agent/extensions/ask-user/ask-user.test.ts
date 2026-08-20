@@ -4,8 +4,16 @@ import type {
   ExtensionContext,
   Theme,
 } from "@earendil-works/pi-coding-agent";
-import { visibleWidth, type Editor } from "@earendil-works/pi-tui";
-import { renderQuestionnaire } from "./render.ts";
+import {
+  visibleWidth,
+  type Editor,
+  type MarkdownTheme,
+} from "@earendil-works/pi-tui";
+import {
+  MASTER_DETAIL_MIN_WIDTH,
+  renderQuestionnaire,
+  renderQuestionnaireView,
+} from "./render.ts";
 import {
   answerStateToResult,
   createEmptyAnswer,
@@ -530,6 +538,23 @@ describe("multiline answer rendering", () => {
   const editor = {
     render: () => [],
   } as unknown as Editor;
+  const markdownTheme: MarkdownTheme = {
+    heading: (text) => ansi(33, text),
+    link: (text) => ansi(34, text),
+    linkUrl: (text) => ansi(36, text),
+    code: (text) => ansi(35, text),
+    codeBlock: (text) => ansi(35, text),
+    codeBlockBorder: (text) => ansi(90, text),
+    quote: (text) => ansi(37, text),
+    quoteBorder: (text) => ansi(90, text),
+    hr: (text) => ansi(90, text),
+    listBullet: (text) => ansi(33, text),
+    bold: (text) => ansi(1, text),
+    italic: (text) => ansi(3, text),
+    strikethrough: (text) => ansi(9, text),
+    underline: (text) => ansi(4, text),
+    highlightCode: (code) => code.split("\n").map((line) => ansi(35, line)),
+  };
   const stripAnsi = (text: string) => text.replace(/\u001b\[[0-9;]*m/g, "");
 
   function renderedCustomAnswer(
@@ -544,6 +569,7 @@ describe("multiline answer rendering", () => {
         cursors: [2],
         screen,
         editor,
+        markdownTheme,
       },
       theme,
       width,
@@ -576,6 +602,219 @@ describe("multiline answer rendering", () => {
     expect(lines.every((line) => visibleWidth(line) <= 8)).toBe(true);
     expect(plainLines.some((line) => line.includes("AB"))).toBe(true);
     expect(plainLines.some((line) => line.includes("CD"))).toBe(true);
+  });
+
+  function descriptionView(
+    description: string,
+    width = 80,
+    screen = 0,
+    overrides: Partial<Parameters<typeof renderQuestionnaireView>[0]> = {},
+  ) {
+    return renderQuestionnaireView(
+      {
+        questions: [question({
+          options: [{ label: "Vim", description }, { label: "Emacs" }],
+        })],
+        answers: [{ selected: new Set([0]) }],
+        cursors: [0],
+        screen,
+        editor,
+        markdownTheme,
+        ...overrides,
+      },
+      theme,
+      width,
+    );
+  }
+
+  function renderedDescription(
+    description: string,
+    width = 80,
+    screen = 0,
+  ) {
+    return descriptionView(description, width, screen).lines;
+  }
+
+  test("uses master-detail at wide widths and stacked rendering below the breakpoint", () => {
+    const wide = descriptionView(
+      "FIRST_DETAIL",
+      MASTER_DETAIL_MIN_WIDTH + 4,
+      0,
+      {
+        questions: [question({
+          options: [
+            { label: "Vim", description: "FIRST_DETAIL" },
+            { label: "Emacs", description: "SECOND_DETAIL" },
+          ],
+        })],
+      },
+    );
+    const narrow = descriptionView(
+      "FIRST_DETAIL",
+      MASTER_DETAIL_MIN_WIDTH + 3,
+      0,
+      {
+        questions: [question({
+          options: [
+            { label: "Vim", description: "FIRST_DETAIL" },
+            { label: "Emacs", description: "SECOND_DETAIL" },
+          ],
+        })],
+      },
+    );
+
+    expect(wide.masterDetail).toBe(true);
+    expect(wide.lines.map(stripAnsi).join("\n")).not.toContain("SECOND_DETAIL");
+    expect(narrow.masterDetail).toBe(false);
+    expect(narrow.lines.map(stripAnsi).join("\n")).toContain("SECOND_DETAIL");
+  });
+
+  test("shows details for the cursor-focused option", () => {
+    const view = descriptionView("unused", 100, 0, {
+      questions: [question({
+        options: [
+          { label: "Vim", description: "FIRST_DETAIL" },
+          { label: "Emacs", description: "SECOND_DETAIL" },
+        ],
+      })],
+      cursors: [1],
+    });
+    const output = view.lines.map(stripAnsi).join("\n");
+
+    expect(output).toContain("SECOND_DETAIL");
+    expect(output).not.toContain("FIRST_DETAIL");
+  });
+
+  test("shows an intentional empty-detail message", () => {
+    const output = descriptionView("", 100).lines.map(stripAnsi).join("\n");
+
+    expect(output).toContain("No additional details.");
+  });
+
+  test("limits long details to the frame budget and reports scroll metrics", () => {
+    const description = Array.from(
+      { length: 20 },
+      (_, index) => `Detail line ${index + 1}`,
+    ).join("\n");
+    const first = descriptionView(description, 100, 0, { maxFrameRows: 18 });
+    const viewport = first.detailViewport;
+    if (!viewport) throw new Error("Expected a detail viewport");
+    const next = descriptionView(description, 100, 0, {
+      maxFrameRows: 18,
+      detailScroll: viewport.pageSize,
+    });
+    const last = descriptionView(description, 100, 0, {
+      maxFrameRows: 18,
+      detailScroll: viewport.maxTop,
+    });
+
+    expect(first.lines.length).toBeLessThanOrEqual(18);
+    expect(viewport.overflow).toBe(true);
+    expect(first.lines.map(stripAnsi).join("\n")).toContain("↓ more details");
+    expect(next.lines.map(stripAnsi).join("\n")).toContain("↑ more details");
+    expect(last.lines.map(stripAnsi).join("\n")).toContain("Detail line 20");
+  });
+
+  test("renders the custom editor inside the detail pane", () => {
+    const editing = {
+      render: () => ["editor content"],
+    } as unknown as Editor;
+    const view = descriptionView("unused", 100, 0, {
+      cursors: [2],
+      editQuestionIndex: 0,
+      editor: editing,
+    });
+    const output = view.lines.map(stripAnsi).join("\n");
+
+    expect(view.masterDetail).toBe(true);
+    expect(output).toContain("Write your own answer");
+    expect(output).toContain("Your answer:");
+    expect(output).toContain("editor content");
+  });
+
+  test("renders multiline Markdown descriptions with block spacing", () => {
+    const lines = renderedDescription(
+      "First line\nSecond **bold** line\n\n- Item with `code`\n\n[Docs](https://example.com)",
+    );
+    const plainLines = lines.map(stripAnsi);
+    const firstIndex = plainLines.findIndex((line) =>
+      line.includes("First line")
+    );
+    const secondIndex = plainLines.findIndex((line) =>
+      line.includes("Second bold line")
+    );
+    const itemIndex = plainLines.findIndex((line) =>
+      line.includes("Item with code")
+    );
+    const output = plainLines.join("\n");
+
+    expect(firstIndex).toBeGreaterThan(-1);
+    expect(secondIndex).toBeGreaterThan(firstIndex);
+    expect(itemIndex).toBeGreaterThan(secondIndex + 1);
+    expect(output).toContain("Docs");
+    expect(output).toContain("https://example.com");
+    expect(output).not.toContain("**bold**");
+    expect(output).not.toContain("`code`");
+    expect(lines[secondIndex]).toContain("\u001b[");
+    expect(plainLines[firstIndex]?.indexOf("First line")).toBe(
+      plainLines[secondIndex]?.indexOf("Second bold line"),
+    );
+  });
+
+  test("renders heading, quote, and fenced-code description blocks", () => {
+    const lines = renderedDescription(
+      "## Details\n\n> Quoted text\n\n```ts\nconst value = 1;\n```",
+    );
+    const output = lines.map(stripAnsi).join("\n");
+
+    expect(output).toContain("Details");
+    expect(output).toContain("Quoted text");
+    expect(output).toContain("const value = 1;");
+    expect(output).not.toContain("## Details");
+    expect(output).not.toContain("> Quoted text");
+    expect(lines.find((line) => line.includes("const value = 1;")))
+      .toContain("\u001b[");
+  });
+
+  test("wraps Markdown descriptions within the dialog width", () => {
+    const lines = renderedDescription(
+      "A long description that must wrap without crossing the dialog border.",
+      32,
+    );
+
+    expect(lines.every((line) => visibleWidth(line) <= 32)).toBe(true);
+    expect(
+      lines.filter((line) =>
+        line.includes("description") || line.includes("dialog")
+      ),
+    ).not.toHaveLength(0);
+  });
+
+  test("keeps Markdown descriptions visible when indentation cannot fit", () => {
+    const lines = renderedDescription("AB\n**CD**", 8);
+    const plainLines = lines.map(stripAnsi);
+
+    expect(lines.every((line) => visibleWidth(line) <= 8)).toBe(true);
+    expect(plainLines.some((line) => line.includes("AB"))).toBe(true);
+    expect(plainLines.some((line) => line.includes("CD"))).toBe(true);
+  });
+
+  test("separates every answer option with a blank line", () => {
+    const plainLines = renderedDescription("").map(stripAnsi);
+    const vimIndex = plainLines.findIndex((line) => line.includes("● Vim"));
+    const emacsIndex = plainLines.findIndex((line) => line.includes("○ Emacs"));
+    const customIndex = plainLines.findIndex((line) =>
+      line.includes("○ Write your own answer")
+    );
+
+    expect(emacsIndex).toBeGreaterThan(vimIndex + 1);
+    expect(customIndex).toBeGreaterThan(emacsIndex + 1);
+  });
+
+  test("keeps descriptions off the confirmation screen", () => {
+    const lines = renderedDescription("SECRET description", 80, 1);
+
+    expect(lines.map(stripAnsi).join("\n")).not.toContain("SECRET description");
   });
 });
 
