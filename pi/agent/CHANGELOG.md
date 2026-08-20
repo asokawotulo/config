@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-20 23:38
+### Added
+- planner skill: made plans execution-oriented, evidence-grounded, adaptive in structure, and concise by default
+
 ## 2026-08-20 23:31
 ### Added
 - ask user: added multiline Markdown option descriptions with a responsive master-detail layout and scrollable detail pane
