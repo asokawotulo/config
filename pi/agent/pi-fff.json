@@ -1,6 +1,4 @@
 {
 	"$schema": "https://raw.githubusercontent.com/dmtrKovalenko/fff/main/packages/pi-fff/pi-fff.schema.json",
-	"mode": "override",
-	"frecencyDbPath": "~/.local/share/fff/frecency",
-	"historyDbPath": "~/.local/share/fff/history"
+	"mode": "override"
 }

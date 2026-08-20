@@ -168,3 +168,4 @@ export PATH="/Users/asoka/.local/bin:$PATH"
 
 # OpenCode
 source $HOME/.config/opencode/flags.zsh
+source $HOME/.pi/flags.zsh
