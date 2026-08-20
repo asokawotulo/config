@@ -21,13 +21,13 @@
  *   Pi session_shutdown -> session_end + idle (defensive activity reset)
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { openSync, writeSync, closeSync } from "node:fs";
-
-interface NotifyContent {
-  title?: string;
-  body?: string;
-}
+import {
+  SUPACODE_NOTIFICATION_EVENT,
+  type SupacodeNotification,
+} from "../../lib/supacode-events.ts";
+import { utf8BytePrefix } from "../../lib/text.ts";
 
 const AGENT = "pi";
 
@@ -104,14 +104,14 @@ function emitPresence(event: string): void {
 // JSON-escape (minus the surrounding quotes) so the wire matches the shell
 // awk path, byte-cap to the same budget, then base64. App-side
 // decodeNotifyValue reverses both and tolerates a mid-escape cut.
-function notifyField(value: string, budget: number): string {
+export function notifyField(value: string, budget: number): string {
   const escaped = JSON.stringify(value).slice(1, -1);
-  const buf = Buffer.from(escaped, "utf8");
-  const capped = buf.length > budget ? buf.subarray(0, budget) : buf;
-  return capped.toString("base64");
+  return Buffer.from(utf8BytePrefix(escaped, budget), "utf8").toString(
+    "base64",
+  );
 }
 
-function emitNotification(content: NotifyContent): void {
+function emitNotification(content: SupacodeNotification): void {
   const meta =
     `kind=notify` +
     `;title=${notifyField(content.title ?? "", 160)}` +
@@ -119,7 +119,9 @@ function emitNotification(content: NotifyContent): void {
   writeToTerminal(`\x1b]3008;start=${AGENT};${meta}\x1b\\`);
 }
 
-function lastAssistantText(ctx: { sessionManager: { getEntries(): any[] } }): string | undefined {
+function lastAssistantText(ctx: {
+  sessionManager: { getEntries(): any[] };
+}): string | undefined {
   const entries = ctx.sessionManager.getEntries();
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
@@ -130,7 +132,10 @@ function lastAssistantText(ctx: { sessionManager: { getEntries(): any[] } }): st
     if (!Array.isArray(content)) continue;
 
     const text = content
-      .filter((c: { type: string; text?: string }) => c.type === "text" && typeof c.text === "string")
+      .filter(
+        (c: { type: string; text?: string }) =>
+          c.type === "text" && typeof c.text === "string",
+      )
       .map((c: { text: string }) => c.text)
       .join("")
       .trim();
@@ -147,6 +152,15 @@ export default function (pi: ExtensionAPI) {
   // Extension load = agent process running. Pi has no equivalent of
   // Claude's SessionStart hook, so we fire it ourselves.
   emitPresence("session_start");
+
+  pi.events.on(SUPACODE_NOTIFICATION_EVENT, (data) => {
+    if (!data || typeof data !== "object") return;
+    const content = data as SupacodeNotification;
+    emitNotification({
+      title: typeof content.title === "string" ? content.title : undefined,
+      body: typeof content.body === "string" ? content.body : undefined,
+    });
+  });
 
   pi.on("agent_start", (_event, _ctx) => {
     emitPresence("busy");
