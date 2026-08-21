@@ -44,7 +44,7 @@ Each agent may declare `contextFiles`, an optional list of up to **16** worktree
 
 ## Confirmation
 
-Valid proposals open directly on a read-only confirmation page. On wide terminals subagent details use roughly three quarters of the page on the left and a top-down Mermaid workflow graph uses the remaining quarter on the right; narrow terminals stack them. The page shows the workflow name and description plus a bordered field/value table for every agent's id, role, model and configured thinking level, full prompt, dependencies, effective tools and skills, and approved context paths. It also shows context bounds and the CC Safety Net command-inspection contract.
+Valid proposals open directly on a read-only confirmation page. On wide terminals subagent details use roughly three quarters of the page on the left and a top-down Mermaid workflow graph uses the remaining quarter on the right; narrow terminals stack them. The page shows the workflow name and description plus a bordered field/value table for every agent's id, role, model and configured thinking level, full prompt, dependencies, effective tools and skills, and approved context paths. It also shows context bounds and the Guardrails command-inspection contract.
 
 Pi's terminal Mermaid renderer draws the DAG with Unicode box art. If full agent labels do not fit the graph column, it renders a numbered top-down Mermaid graph with an agent legend; only widths too narrow for that use the wrapped dependency-edge fallback. Workflow information is never clipped.
 
@@ -71,23 +71,13 @@ A workflow agent may provide narrower `tools` and `skills`; additions are reject
 
 ## Command safety
 
-Every Bash command is passed as a direct argument to the locally installed:
+The standalone Guardrails extension owns CC Safety Net analysis, approval UI, serialization, and session audit records. Commands that CC Safety Net allows run automatically. A blocked command offers **Allow once**, **Edit command**, and **Deny** in the parent host. Edited commands are analyzed again. Headless runs and analysis failures fail closed.
 
-```sh
-cc-safety-net explain --json <command>
-```
+Shell-capable workflows require an active Guardrails extension and pinned analyzer before confirmation. Read-only workflows do not.
 
-The subprocess runs in strict mode and is the sole Bash/Shell command inspector. Allowed commands run automatically. Analysis failure, malformed JSON, or invalid configuration fails closed.
+Dynamic workflows owns child transport only. Embedded children use the shared Guardrails shell hook in process. Detached zmx children send commands through restrictive request/response artifacts to the parent Guardrails broker. Missing, malformed, timed-out, stale, or aborted responses fail closed. One parent FIFO queue serializes prompts across the main host and every child.
 
-When CC Safety Net blocks a command, the parent alert includes the command, Safety Net's reason, and its blocked segment when available. The user can:
-
-- **Allow once** — scoped to that call and recorded in the run artifact.
-- **Edit command** — CC Safety Net analyzes the edited command again.
-- **Deny**.
-
-Parallel prompts are serialized. Headless runs cannot approve commands.
-
-Workflow children use only the workflow child-host permission hook. For zmx children, every shell request crosses restrictive request/response artifacts to the same serialized parent approval queue; missing, malformed, timed-out, or aborted responses fail closed. The embedded fallback applies the identical broker in process. CC Safety Net is used through its CLI only.
+Guardrails stores blocked decision chains in the Pi session. Dynamic workflow `run.json` files retain the chains tagged for that run and agent. Clean commands that CC Safety Net allows automatically are not recorded.
 
 ## Execution backends and result isolation
 
@@ -99,9 +89,9 @@ Whole-tool abort writes interrupt controls to every running child. Targeted `int
 
 ## Observability
 
-Use `/workflows` to list runs from the current Pi session and inspect agent state, current activity, results, errors, and permission decisions. Agent records keep `finalSummary`, persistent `session` metadata, `backend` identity, and complete pi-ai `usage` separate; persisted legacy `output` summaries remain readable. A footer indicator is shown while runs are active.
+Use `/workflows` to list runs from the current Pi session and inspect agent state, current activity, results, errors, and Guardrails decisions. Agent records keep `finalSummary`, persistent `session` metadata, `backend` identity, and complete pi-ai `usage` separate; persisted legacy `output` summaries remain readable. A footer indicator is shown while runs are active.
 
-Shared events provide bounded run/state snapshots plus `dynamic-workflows:open-agent` and payload-free `dynamic-workflows:targeted-control` (`interrupt | terminate`) targets. Snapshots expose only sanitized per-agent total cost and optional zmx session identity in addition to status/timing labels. They never contain prompts, context contents, transcripts, tool arguments, permission commands, or approved workflow source.
+Shared events provide bounded run/state snapshots plus `dynamic-workflows:open-agent` and payload-free `dynamic-workflows:targeted-control` (`interrupt | terminate`) targets. Snapshots expose only sanitized per-agent total cost and optional zmx session identity in addition to status/timing labels. They never contain prompts, context contents, transcripts, tool arguments, Guardrails commands, or approved workflow source.
 
 Artifacts are written with restrictive permissions under:
 

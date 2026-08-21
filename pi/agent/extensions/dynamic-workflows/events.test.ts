@@ -14,6 +14,7 @@ import {
   parseDynamicWorkflowRunSnapshot,
   parseDynamicWorkflowStateEvent,
 } from "../../lib/dynamic-workflow-events.ts";
+import { appendGuardrailDecision } from "./index.ts";
 import { formatRun, toRunSnapshot, toRunSnapshots } from "./store.ts";
 import type { WorkflowRun } from "./types.ts";
 
@@ -46,6 +47,23 @@ function fixture(): WorkflowRun {
         cost: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, total: MAX_DYNAMIC_WORKFLOW_COST + 1 },
       } : undefined,
     })),
+    guardrailDecisions: [{
+      version: 1,
+      id: "gr_secret",
+      sessionId: "session-test",
+      source: { kind: "dynamic-workflow", runId: "wf_test", agentId: "agent-0" },
+      startedAt: 1,
+      finishedAt: 2,
+      steps: [{
+        kind: "analysis",
+        at: 1,
+        command: "SECRET_GUARDRAIL_COMMAND",
+        result: "blocked",
+        reason: "SECRET_GUARDRAIL_REASON",
+      }],
+      outcome: "denied",
+      reason: "SECRET_GUARDRAIL_REASON",
+    }],
     permissionDecisions: [{
       at: 1,
       agentId: "agent-0",
@@ -71,6 +89,17 @@ describe("dynamic workflow sidebar events", () => {
     expect(DYNAMIC_WORKFLOW_TARGETED_CONTROL_EVENT).toBe("dynamic-workflows:targeted-control");
   });
 
+  test("copies only matching Guardrails decisions into a run", () => {
+    const run = fixture();
+    const decision = run.guardrailDecisions[0]!;
+    run.guardrailDecisions = [];
+    const event = { sessionId: run.sessionId, decision };
+    expect(appendGuardrailDecision(run, event)).toBe(true);
+    expect(appendGuardrailDecision(run, event)).toBe(false);
+    expect(appendGuardrailDecision(run, { ...event, sessionId: "other" })).toBe(false);
+    expect(run.guardrailDecisions).toEqual([decision]);
+  });
+
   test("projects private run records to bounded display snapshots", () => {
     const snapshot = toRunSnapshot(fixture());
     const serialized = JSON.stringify(snapshot);
@@ -90,6 +119,7 @@ describe("dynamic workflow sidebar events", () => {
     expect(serialized).not.toContain("PRIVATE_PI_SESSION");
     expect(serialized).not.toContain("/private/session");
     expect(serialized).not.toContain("SECRET_PERMISSION");
+    expect(serialized).not.toContain("SECRET_GUARDRAIL");
     expect(serialized).not.toContain("SECRET_APPROVED_SOURCE");
     expect(serialized).not.toContain("/private/project");
   });
@@ -157,6 +187,10 @@ describe("dynamic workflow sidebar events", () => {
     expect(formatted).toContain("NEW_SUMMARY");
     expect(formatted).not.toContain("OLD_SUMMARY");
     expect(formatted).toContain("LEGACY_ONLY");
+    expect(formatted).toContain("Guardrail decisions:");
+    expect(formatted).toContain("SECRET_GUARDRAIL_COMMAND");
+    expect(formatted).toContain("Legacy permission decisions:");
+    expect(formatted).toContain("SECRET_PERMISSION_COMMAND");
   });
 
   test("bounds hydration batches and handles unicode without broken characters", () => {

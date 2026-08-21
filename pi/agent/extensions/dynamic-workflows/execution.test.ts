@@ -11,12 +11,12 @@ import {
   atomicWriteJson,
   childArtifactPaths,
   initializeChildArtifacts,
-  listPermissionRequests,
-  permissionResponsePath,
+  listGuardrailRequests,
+  guardrailResponsePath,
   readJson,
   workflowArtifactDirectory,
-  writePermissionRequest,
-  type PermissionResponse,
+  writeGuardrailRequest,
+  type GuardrailTransportResponse,
 } from "./protocol.ts";
 import { aggregateAgentUsage, updateAgentActivity } from "./runner.ts";
 import { classifyAssistantSettlement } from "./settlement.ts";
@@ -62,19 +62,19 @@ describe("dynamic workflow execution protocol", () => {
     expect(typeof childHost).toBe("function");
   });
 
-  test("atomically exchanges restrictive permission artifacts", () => {
+  test("atomically exchanges restrictive Guardrails transport artifacts", () => {
     const runId = `wf_test_${Date.now()}`;
     const paths = childArtifactPaths(runId, "reader");
     cleanup.push(workflowArtifactDirectory(runId));
     initializeChildArtifacts(paths);
-    const request = writePermissionRequest(paths, "git status");
-    expect(listPermissionRequests(paths)).toEqual([request]);
+    const request = writeGuardrailRequest(paths, "git status");
+    expect(listGuardrailRequests(paths)).toEqual([request]);
     expect(statSync(paths.directory).mode & 0o777).toBe(0o700);
     expect(statSync(join(paths.requests, `${request.id}.json`)).mode & 0o777).toBe(0o600);
 
-    const response: PermissionResponse = { version: 1, id: request.id, at: 2, command: "git status" };
-    atomicWriteJson(permissionResponsePath(paths, request.id), response);
-    expect(readJson<PermissionResponse>(permissionResponsePath(paths, request.id))).toEqual(response);
+    const response: GuardrailTransportResponse = { version: 1, id: request.id, at: 2, command: "git status" };
+    atomicWriteJson(guardrailResponsePath(paths, request.id), response);
+    expect(readJson<GuardrailTransportResponse>(guardrailResponsePath(paths, request.id))).toEqual(response);
   });
 
   test("classifies successful, blank, missing, errored, and cancelled assistant settlement uniformly", () => {
@@ -144,7 +144,7 @@ describe("dynamic workflow execution protocol", () => {
     const progress = new CoalescedProgress(() => progressCommits++, 100, timers);
     const run: WorkflowRun = {
       runId: "wf_shutdown", sessionId: "session", name: "shutdown", cwd: "/project", status: "running",
-      approvedSource: "source", waves: [], permissionDecisions: [], startedAt: 1,
+      approvedSource: "source", waves: [], guardrailDecisions: [], permissionDecisions: [], startedAt: 1,
       agents: [
         { id: "queued", role: "reader", prompt: "inspect", status: "queued", model: "p/m", tools: [], skills: [] },
         { id: "running", role: "reader", prompt: "inspect", status: "running", model: "p/m", tools: [], skills: [], startedAt: 2 },
@@ -182,7 +182,7 @@ describe("dynamic workflow execution protocol", () => {
   test("formats multi-byte summaries fairly at the exact parent byte limit", () => {
     const run: WorkflowRun = {
       runId: "wf_output", sessionId: "session", name: "output", cwd: "/project", status: "completed",
-      approvedSource: "source", waves: [], permissionDecisions: [], startedAt: 1,
+      approvedSource: "source", waves: [], guardrailDecisions: [], permissionDecisions: [], startedAt: 1,
       agents: Array.from({ length: 32 }, (_, index) => ({
         id: `agent-${index}`, role: "reader", prompt: "inspect", status: "completed" as const,
         model: "provider/model", tools: [], skills: [], finalSummary: `body-${index}:🙂漢字\n` + "x".repeat(20_000),

@@ -12,6 +12,7 @@ import {
   type DynamicWorkflowRunSnapshot,
   type DynamicWorkflowStatus,
 } from "../../lib/dynamic-workflow-events.ts";
+import { formatGuardrailDecision } from "../guardrails/audit.ts";
 import type { WorkflowRun } from "./types.ts";
 
 const AGENT_STATUSES = new Set<DynamicWorkflowAgentStatus>(["queued", "running", "completed", "failed", "skipped", "cancelled"]);
@@ -29,8 +30,10 @@ function agentCost(value: WorkflowRun["agents"][number]["usage"]): number | unde
   return Math.min(raw, MAX_DYNAMIC_WORKFLOW_COST);
 }
 
-function restoreLegacyAgentFields(run: WorkflowRun): WorkflowRun {
+function restoreLegacyRunFields(run: WorkflowRun): WorkflowRun {
   if (!Array.isArray(run.agents)) run.agents = [];
+  if (!Array.isArray(run.guardrailDecisions)) run.guardrailDecisions = [];
+  if (run.permissionDecisions !== undefined && !Array.isArray(run.permissionDecisions)) run.permissionDecisions = [];
   for (const agent of run.agents) {
     if (typeof agent.finalSummary !== "string" && typeof agent.output === "string") agent.finalSummary = agent.output;
   }
@@ -94,7 +97,7 @@ export function loadRuns(sessionId?: string): WorkflowRun[] {
   for (const entry of readdirSync(root(), { withFileTypes: true })) {
     if (!entry.isDirectory() || !entry.name.startsWith("wf_")) continue;
     try {
-      const run = restoreLegacyAgentFields(
+      const run = restoreLegacyRunFields(
         JSON.parse(readFileSync(join(root(), entry.name, "run.json"), "utf8")) as WorkflowRun,
       );
       if (sessionId && run.sessionId !== sessionId) continue;
@@ -119,8 +122,12 @@ export function formatRun(run: WorkflowRun): string {
     if (summary) lines.push(`  Result: ${summary}`);
     if (agent.error) lines.push(`  Error: ${agent.error}`);
   }
-  if (run.permissionDecisions.length) {
-    lines.push("", "Permission decisions:");
+  if (run.guardrailDecisions.length) {
+    lines.push("", "Guardrail decisions:");
+    for (const decision of run.guardrailDecisions) lines.push(formatGuardrailDecision(decision), "");
+  }
+  if (run.permissionDecisions?.length) {
+    lines.push("", "Legacy permission decisions:");
     for (const decision of run.permissionDecisions) {
       lines.push(`- ${decision.agentId}: ${decision.action} ${decision.command} (${decision.source}: ${decision.reason})`);
     }

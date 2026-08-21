@@ -1,16 +1,17 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { registerGuardrailShellHook } from "../guardrails/child.ts";
 import {
   CHILD_PROTOCOL_VERSION,
   atomicWriteJson,
   childArtifactPaths,
   delay,
-  permissionResponsePath,
+  guardrailResponsePath,
   readJson,
-  writePermissionRequest,
+  writeGuardrailRequest,
   type ChildConfig,
   type ChildControl,
   type ChildSettledStatus,
-  type PermissionResponse,
+  type GuardrailTransportResponse,
 } from "./protocol.ts";
 import { classifyAssistantSettlement } from "./settlement.ts";
 import type { ClassifyAssistantSettlementResult } from "./types.ts";
@@ -26,22 +27,22 @@ function messagesFromEntries(entries: readonly unknown[]): unknown[] {
   });
 }
 
-async function awaitPermissionResponse(config: ChildConfig, command: string, signal?: AbortSignal): Promise<PermissionResponse> {
+async function awaitGuardrailResponse(config: ChildConfig, command: string, signal?: AbortSignal): Promise<GuardrailTransportResponse> {
   const paths = childArtifactPaths(config.runId, config.agentId);
-  const request = writePermissionRequest(paths, command);
-  const responsePath = permissionResponsePath(paths, request.id);
+  const request = writeGuardrailRequest(paths, command);
+  const responsePath = guardrailResponsePath(paths, request.id);
   const deadline = Date.now() + 10 * 60_000;
   while (Date.now() < deadline) {
-    const response = readJson<PermissionResponse>(responsePath);
+    const response = readJson<GuardrailTransportResponse>(responsePath);
     if (response) {
-      if (response.version !== CHILD_PROTOCOL_VERSION || response.id !== request.id) throw new Error("Malformed parent permission response");
+      if (response.version !== CHILD_PROTOCOL_VERSION || response.id !== request.id) throw new Error("Malformed parent Guardrails response");
       if (typeof response.command === "string" && !response.block) return response;
       if (typeof response.block === "string" && !response.command) return response;
-      throw new Error("Parent permission response did not contain exactly one verdict");
+      throw new Error("Parent Guardrails response did not contain exactly one verdict");
     }
     await delay(50, signal);
   }
-  throw new Error("Parent permission broker timed out");
+  throw new Error("Parent Guardrails broker timed out");
 }
 
 export default function childHost(pi: ExtensionAPI) {
@@ -78,20 +79,13 @@ export default function childHost(pi: ExtensionAPI) {
     systemPrompt: `${event.systemPrompt}\n\n${config.systemPrompt}`,
   }));
 
-  pi.on("tool_call", async (event, ctx) => {
+  registerGuardrailShellHook(pi, async (command, ctx) => {
     currentContext = ctx;
-    if (event.toolName !== "bash" && event.toolName !== "Shell") return;
-    const input = event.input as Record<string, unknown>;
-    if (typeof input.command !== "string") return { block: true, reason: "Malformed shell command denied" };
-    try {
-      writeRunning("Waiting for parent permission broker", ctx);
-      const response = await awaitPermissionResponse(config, input.command, ctx.signal);
-      if (response.block) return { block: true, reason: response.block };
-      input.command = response.command!;
-      writeRunning("Using shell", ctx);
-    } catch (error) {
-      return { block: true, reason: `Permission broker failed closed: ${error instanceof Error ? error.message : String(error)}` };
-    }
+    writeRunning("Waiting for parent Guardrails broker", ctx);
+    const response = await awaitGuardrailResponse(config, command, ctx.signal);
+    if (response.block) return { block: response.block };
+    writeRunning("Using shell", ctx);
+    return { command: response.command! };
   });
 
   pi.on("tool_execution_start", (event, ctx) => {

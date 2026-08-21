@@ -233,7 +233,7 @@ export class WorkflowDialogComponent extends DialogComponent<WorkflowReviewResul
       "",
       ...content,
       this.theme.fg("dim", `Context limit: ${MAX_CONTEXT_FILES_PER_AGENT} files / ${MAX_CONTEXT_BYTES_PER_AGENT} bytes per agent`),
-      this.theme.fg("dim", "Bash/Shell commands are inspected by CC Safety Net; blocked commands require user approval."),
+      this.theme.fg("dim", "Guardrails inspects Bash/Shell commands with CC Safety Net; blocked commands require user approval."),
     ];
   }
 

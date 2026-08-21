@@ -1,5 +1,6 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import type { DynamicWorkflowAgentStatus, DynamicWorkflowStatus } from "../../lib/dynamic-workflow-events.ts";
+import type { GuardrailDecisionChain } from "../guardrails/types.ts";
 
 export type AgentStatus = DynamicWorkflowAgentStatus;
 export type WorkflowStatus = DynamicWorkflowStatus;
@@ -80,7 +81,7 @@ export interface ResolvedWorkflow {
   waves: string[][];
 }
 
-export interface PermissionDecisionRecord {
+export interface LegacyPermissionDecisionRecord {
   at: number;
   agentId: string;
   command: string;
@@ -149,7 +150,9 @@ export interface WorkflowRun {
   approvedSource: string;
   waves: string[][];
   agents: AgentRunRecord[];
-  permissionDecisions: PermissionDecisionRecord[];
+  guardrailDecisions: GuardrailDecisionChain[];
+  /** Legacy records written before Guardrails owned command authorization. */
+  permissionDecisions?: LegacyPermissionDecisionRecord[];
   startedAt: number;
   finishedAt?: number;
   error?: string;

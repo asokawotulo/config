@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-21 12:39
+### Added
+- guardrails: protected main-host and workflow-child Bash/Shell calls with serialized CC Safety Net approval and session audit browsing
+### Changed
+- dynamic workflows: delegated command policy to Guardrails while retaining fail-closed child transport and per-run decision records
+- command safety: upgraded and pinned CC Safety Net 2.0.8
+
 ## 2026-08-20 23:38
 ### Added
 - planner skill: made plans execution-oriented, evidence-grounded, adaptive in structure, and concise by default

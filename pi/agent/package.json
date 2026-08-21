@@ -16,7 +16,7 @@
     "@earendil-works/pi-coding-agent": "0.84.2",
     "@earendil-works/pi-tui": "0.84.2",
     "acorn": "8.18.0",
-    "cc-safety-net": "1.0.6",
+    "cc-safety-net": "2.0.8",
     "diff": "8.0.4",
     "effect": "^4.0.0-beta.99",
     "firecrawl": "^4.30.1",

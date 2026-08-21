@@ -6,26 +6,26 @@ import {
   SettingsManager,
   type AgentSession,
   type ExtensionContext,
-  type InlineExtension,
 } from "@earendil-works/pi-coding-agent";
-import { authorizeCommand, PermissionApprovalQueue } from "./permissions.ts";
+import { guardrailChildExtension } from "../guardrails/child.ts";
+import type { GuardrailAuthorizationResult } from "../guardrails/types.ts";
 import {
   CHILD_PROTOCOL_VERSION,
   atomicWriteJson,
   childArtifactPaths,
   delay,
   initializeChildArtifacts,
-  listPermissionRequests,
-  permissionResponsePath,
+  listGuardrailRequests,
+  guardrailResponsePath,
   readJson,
   truncateUtf8,
   writeChildConfig,
   writeChildControl,
   type ChildStatus,
-  type PermissionResponse,
+  type GuardrailTransportResponse,
 } from "./protocol.ts";
 import { classifyAssistantSettlement } from "./settlement.ts";
-import type { AgentRunRecord, ClassifyAssistantSettlementResult, PermissionDecisionRecord, ResolvedAgentDefinition } from "./types.ts";
+import type { AgentRunRecord, ClassifyAssistantSettlementResult, ResolvedAgentDefinition } from "./types.ts";
 import { aggregateUsage, isCompleteUsage, usageFromSessionEntries } from "./usage.ts";
 import {
   collisionSafeZmxName,
@@ -53,10 +53,9 @@ export interface RunAgentOptions {
   cwd: string;
   projectTrusted: boolean;
   parentContext: ExtensionContext;
-  approvalQueue: PermissionApprovalQueue;
+  authorize: (command: string, signal?: AbortSignal) => Promise<GuardrailAuthorizationResult>;
   signal?: AbortSignal;
   record: AgentRunRecord;
-  onPermission: (decision: PermissionDecisionRecord) => void;
   onProgress: () => void;
   /** Deterministic backend override for focused tests. */
   zmxPath?: string | null;
@@ -105,30 +104,6 @@ async function shutdown(session: AgentSession) {
   session.dispose();
 }
 
-function permissionExtension(options: RunAgentOptions): InlineExtension {
-  return {
-    name: `dynamic-workflow-permissions:${options.agent.id}`,
-    factory: (pi) => {
-      pi.on("tool_call", async (event) => {
-        if (event.toolName !== "bash" && event.toolName !== "Shell") return;
-        const input = event.input as Record<string, unknown>;
-        if (typeof input.command !== "string") return { block: true, reason: "Malformed shell command denied" };
-        const verdict = await authorizeCommand({
-          command: input.command,
-          cwd: options.cwd,
-          agentId: options.agent.id,
-          ctx: options.parentContext,
-          queue: options.approvalQueue,
-          signal: options.signal,
-          record: options.onPermission,
-        });
-        if (verdict.block) return { block: true, reason: verdict.block };
-        if (verdict.command) input.command = verdict.command;
-      });
-    },
-  };
-}
-
 function validateAgent(options: RunAgentOptions): { model: NonNullable<ReturnType<ExtensionContext["modelRegistry"]["find"]>> } | { error: string } {
   const role = options.agent.resolvedRole;
   const slash = role.model.indexOf("/");
@@ -151,7 +126,10 @@ async function runEmbedded(options: RunAgentOptions, model: NonNullable<ReturnTy
     agentDir,
     settingsManager,
     appendSystemPrompt: [childSystemPrompt(options.agent)],
-    extensionFactories: [permissionExtension(options)],
+    extensionFactories: [guardrailChildExtension(
+      `dynamic-workflow-guardrails:${options.agent.id}`,
+      (command, ctx) => options.authorize(command, ctx.signal ?? options.signal),
+    )],
     extensionsOverride: (current) => ({ ...current, extensions: [] }),
     skillsOverride: (current) => ({
       skills: current.skills.filter((skill) => allowedSkills.has(skill.name)),
@@ -216,31 +194,23 @@ async function runEmbedded(options: RunAgentOptions, model: NonNullable<ReturnTy
   }
 }
 
-async function brokerPermissionRequests(options: RunAgentOptions, processed: Set<string>): Promise<void> {
+async function brokerGuardrailRequests(options: RunAgentOptions, processed: Set<string>): Promise<void> {
   const paths = childArtifactPaths(options.runId, options.agent.id);
-  for (const request of listPermissionRequests(paths)) {
+  for (const request of listGuardrailRequests(paths)) {
     if (processed.has(request.id)) continue;
-    const responsePath = permissionResponsePath(paths, request.id);
-    if (readJson<PermissionResponse>(responsePath)) { processed.add(request.id); continue; }
-    let verdict: { command?: string; block?: string };
+    const responsePath = guardrailResponsePath(paths, request.id);
+    if (readJson<GuardrailTransportResponse>(responsePath)) { processed.add(request.id); continue; }
+    let verdict: GuardrailAuthorizationResult;
     try {
-      verdict = await authorizeCommand({
-        command: request.command,
-        cwd: options.cwd,
-        agentId: options.agent.id,
-        ctx: options.parentContext,
-        queue: options.approvalQueue,
-        signal: options.signal,
-        record: options.onPermission,
-      });
+      verdict = await options.authorize(request.command, options.signal);
     } catch (error) {
-      verdict = { block: `Permission broker failed closed: ${error instanceof Error ? error.message : String(error)}` };
+      verdict = { block: `Guardrails broker failed closed: ${error instanceof Error ? error.message : String(error)}` };
     }
-    const response: PermissionResponse = {
+    const response: GuardrailTransportResponse = {
       version: CHILD_PROTOCOL_VERSION,
       id: request.id,
       at: Date.now(),
-      ...(verdict.command && !verdict.block ? { command: verdict.command } : { block: verdict.block ?? "Permission denied" }),
+      ...(verdict.command && !verdict.block ? { command: verdict.command } : { block: verdict.block ?? "Guardrails denied the command" }),
     };
     atomicWriteJson(responsePath, response);
     processed.add(request.id);
@@ -292,7 +262,7 @@ async function runZmx(options: RunAgentOptions, zmxPath: string): Promise<RunAge
     let lastStatusAt = -1;
     let lastFreshStatusAt = startedAt;
     while (true) {
-      await brokerPermissionRequests(options, processed);
+      await brokerGuardrailRequests(options, processed);
       const status = readJson<ChildStatus>(paths.status);
       if (
         status?.version === CHILD_PROTOCOL_VERSION &&

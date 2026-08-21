@@ -1,6 +1,6 @@
 ---
 name: dynamic-workflows
-description: Designs and launches editable, statically declared DAGs of specialized Pi subagents with role-based tools and skills, dependency ordering, CC Safety Net command inspection, and parallel execution. Use when a task benefits from multiple independent investigations, implementation/review phases, or explicit multi-agent coordination.
+description: Designs and launches editable, statically declared DAGs of specialized Pi subagents with role-based tools and skills, dependency ordering, Guardrails command approval, and parallel execution. Use when a task benefits from multiple independent investigations, implementation/review phases, or explicit multi-agent coordination.
 ---
 
 # Dynamic Workflows
@@ -116,7 +116,7 @@ Prefer least privilege:
 - provide `contextFiles` and tell the agent to use them first, exploring only when they are insufficient;
 - workflow-level tools and skills cannot exceed the selected role.
 
-Every Bash/Shell command is inspected solely by `cc-safety-net explain --json`. Allowed commands run automatically. A blocked command opens a serialized user prompt that shows CC Safety Net's reason and offers **Allow once**, **Edit command**, and **Deny**; edited commands are re-analyzed. Never design a workflow that depends on the user approving a destructive command.
+The Guardrails extension inspects every Bash/Shell command with CC Safety Net. Shell-capable workflows require Guardrails; read-only workflows do not. Allowed commands run automatically. A blocked command opens a serialized parent prompt with **Allow once**, **Edit command**, and **Deny**; edited commands are analyzed again. Never design a workflow that depends on approval of a destructive command.
 
 ## Confirmation and Execution
 
@@ -128,7 +128,7 @@ After calling `dynamic_workflow`:
 4. When the tool returns a user suggestion, apply it to the complete workflow and call `dynamic_workflow` again with a revised static DAG. Do not run or merely explain the rejected proposal.
 5. Cancellation means no subagent runs; acknowledge it without immediately resubmitting.
 6. During execution, the sidebar shows current-session workflows and subagent states.
-7. `/workflows` shows persisted run details, results, errors, and permission decisions.
+7. `/workflows` shows persisted run details, results, errors, and Guardrails decisions.
 
 If a dependency fails, descendants are skipped while unrelated branches continue. Treat a partially failed workflow as evidence to inspect, not as automatic success.
 

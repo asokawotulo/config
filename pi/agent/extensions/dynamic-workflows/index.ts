@@ -6,6 +6,12 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { centeredDialogOverlay, showDialog } from "../../shared/ui/index.ts";
 import {
+  GUARDRAILS_DECISION_EVENT,
+  requestGuardrailsAuthorization,
+  requestGuardrailsStatus,
+  type GuardrailsDecisionEvent,
+} from "../../lib/guardrails-events.ts";
+import {
   DYNAMIC_WORKFLOW_OPEN_AGENT_EVENT,
   DYNAMIC_WORKFLOW_RUN_EVENT,
   DYNAMIC_WORKFLOW_STATE_EVENT,
@@ -24,7 +30,7 @@ import {
   type WorkflowReviewResult,
 } from "./form/dialog.ts";
 import { parentResultText } from "./output.ts";
-import { PermissionApprovalQueue } from "./permissions.ts";
+import { parseGuardrailDecision } from "../guardrails/audit.ts";
 import { CoalescedProgress } from "./progress.ts";
 import { loadRoles } from "./roles.ts";
 import { aggregateAgentUsage, controlRunningAgent, runAgent } from "./runner.ts";
@@ -36,8 +42,9 @@ import { expandAgentOutputs, resolveWorkflow } from "./workflow.ts";
 
 const CONCURRENCY = 4;
 
-function validateResources(plan: ResolvedWorkflow, pi: ExtensionAPI, ctx: ExtensionContext) {
+export function validateResources(plan: ResolvedWorkflow, pi: ExtensionAPI, ctx: ExtensionContext) {
   const tools = new Set(pi.getAllTools().map((tool) => tool.name));
+  const guardrails = requestGuardrailsStatus(pi);
   for (const agent of plan.agents) {
     const slash = agent.resolvedRole.model.indexOf("/");
     const provider = agent.resolvedRole.model.slice(0, slash);
@@ -47,6 +54,9 @@ function validateResources(plan: ResolvedWorkflow, pi: ExtensionAPI, ctx: Extens
     if (unknownTool) throw new Error(`Agent ${agent.id} uses unknown tool ${unknownTool}`);
     const unknownSkill = agent.effectiveSkills.find((skill) => !existsSync(join(getAgentDir(), "skills", skill, "SKILL.md")));
     if (unknownSkill) throw new Error(`Agent ${agent.id} uses unknown global skill ${unknownSkill}`);
+    if (agent.effectiveTools.some((tool) => tool === "bash" || tool === "Shell") && !guardrails?.available) {
+      throw new Error(`Agent ${agent.id} requires the Guardrails extension for ${agent.effectiveTools.includes("Shell") ? "Shell" : "bash"}`);
+    }
   }
 }
 
@@ -131,7 +141,26 @@ export function cancelUnfinishedAgents(run: WorkflowRun, finishedAt = Date.now()
   }
 }
 
-type ActiveRun = { run: WorkflowRun; abort: AbortController; closeProgress?: () => void };
+type ActiveRun = { run: WorkflowRun; abort: AbortController; closeProgress?: () => void; commitGuardrailDecision?: () => void };
+
+export function appendGuardrailDecision(run: WorkflowRun, data: unknown): boolean {
+  const event = data as Partial<GuardrailsDecisionEvent> | undefined;
+  const decision = parseGuardrailDecision(event?.decision);
+  if (
+    !decision
+    || event?.sessionId !== decision.sessionId
+    || decision.sessionId !== run.sessionId
+    || decision.source.kind !== "dynamic-workflow"
+  ) return false;
+  const source = decision.source;
+  if (
+    source.runId !== run.runId
+    || !run.agents.some((agent) => agent.id === source.agentId)
+    || run.guardrailDecisions.some((record) => record.id === decision.id)
+  ) return false;
+  run.guardrailDecisions.push(decision);
+  return true;
+}
 
 export function finalizeRunForShutdown(
   activeRun: ActiveRun,
@@ -177,6 +206,13 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
     pi.events.emit(DYNAMIC_WORKFLOW_STATE_EVENT, event);
   };
 
+  pi.events.on(GUARDRAILS_DECISION_EVENT, (data) => {
+    const event = data as Partial<GuardrailsDecisionEvent> | undefined;
+    const decision = parseGuardrailDecision(event?.decision);
+    if (!decision || decision.source.kind !== "dynamic-workflow") return;
+    const activeRun = active.get(decision.source.runId);
+    if (activeRun && appendGuardrailDecision(activeRun.run, data)) activeRun.commitGuardrailDecision?.();
+  });
   pi.events.on(DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT, (data) => {
     const request = data as Partial<DynamicWorkflowStateRequestEvent> | undefined;
     if (typeof request?.sessionId === "string") publishState(request.sessionId);
@@ -346,13 +382,12 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
           id: agent.id, role: agent.role, prompt: agent.prompt, status: "queued",
           model: agent.resolvedRole.model, tools: agent.effectiveTools, skills: agent.effectiveSkills,
         })),
-        permissionDecisions: [],
+        guardrailDecisions: [],
         startedAt: Date.now(),
       };
       const abort = new AbortController();
       const onAbort = () => abort.abort(signal?.reason);
       if (signal?.aborted) onAbort(); else signal?.addEventListener("abort", onAbort, { once: true });
-      const approvalQueue = new PermissionApprovalQueue();
       const outputs = new Map<string, string>();
       const commitProgress = () => {
         saveRun(run);
@@ -363,7 +398,12 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
         });
       };
       const progress = new CoalescedProgress(commitProgress);
-      active.set(runId, { run, abort, closeProgress: () => progress.dispose() });
+      active.set(runId, {
+        run,
+        abort,
+        closeProgress: () => progress.dispose(),
+        commitGuardrailDecision: () => progress.immediate(),
+      });
       if (ctx.hasUI) lastUi = ctx.ui;
       updateStatus();
       saveRun(run);
@@ -405,10 +445,15 @@ export default function dynamicWorkflows(pi: ExtensionAPI) {
               cwd: ctx.cwd,
               projectTrusted: ctx.isProjectTrusted(),
               parentContext: ctx,
-              approvalQueue,
+              authorize: (command, requestSignal) => requestGuardrailsAuthorization(pi, {
+                command,
+                cwd: ctx.cwd,
+                sessionId: run.sessionId,
+                source: { kind: "dynamic-workflow", runId, agentId: agent.id },
+                signal: requestSignal ?? abort.signal,
+              }),
               signal: abort.signal,
               record,
-              onPermission: (decision) => { run.permissionDecisions.push(decision); progress.immediate(); },
               onProgress: () => progress.transient(),
             });
             if (active.get(runId)?.run !== run) return;

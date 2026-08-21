@@ -49,14 +49,14 @@ export interface ChildRunningStatus {
 
 export type ChildStatus = ChildRunningStatus | ChildSettledStatus;
 
-export interface PermissionRequest {
+export interface GuardrailTransportRequest {
   version: 1;
   id: string;
   command: string;
   at: number;
 }
 
-export interface PermissionResponse {
+export interface GuardrailTransportResponse {
   version: 1;
   id: string;
   at: number;
@@ -129,25 +129,25 @@ export function writeChildConfig(paths: ChildArtifactPaths, config: ChildConfig)
   atomicWriteJson(paths.config, config);
 }
 
-export function listPermissionRequests(paths: ChildArtifactPaths): PermissionRequest[] {
+export function listGuardrailRequests(paths: ChildArtifactPaths): GuardrailTransportRequest[] {
   if (!existsSync(paths.requests)) return [];
-  const requests: PermissionRequest[] = [];
+  const requests: GuardrailTransportRequest[] = [];
   for (const name of readdirSync(paths.requests).sort()) {
     if (!/^[a-f0-9]{24}\.json$/.test(name)) continue;
-    const request = readJson<PermissionRequest>(join(paths.requests, name));
+    const request = readJson<GuardrailTransportRequest>(join(paths.requests, name));
     if (request?.version === CHILD_PROTOCOL_VERSION && request.id === name.slice(0, -5) && typeof request.command === "string") requests.push(request);
   }
   return requests;
 }
 
-export function permissionResponsePath(paths: ChildArtifactPaths, id: string): string {
-  if (!/^[a-f0-9]{24}$/.test(id)) throw new Error("Invalid permission request id");
+export function guardrailResponsePath(paths: ChildArtifactPaths, id: string): string {
+  if (!/^[a-f0-9]{24}$/.test(id)) throw new Error("Invalid Guardrails request id");
   return join(paths.responses, `${id}.json`);
 }
 
-export function writePermissionRequest(paths: ChildArtifactPaths, command: string): PermissionRequest {
+export function writeGuardrailRequest(paths: ChildArtifactPaths, command: string): GuardrailTransportRequest {
   if (!command || Buffer.byteLength(command, "utf8") > 128 * 1024) throw new Error("Shell command is empty or too large");
-  const request: PermissionRequest = {
+  const request: GuardrailTransportRequest = {
     version: CHILD_PROTOCOL_VERSION,
     id: randomBytes(12).toString("hex"),
     command,
