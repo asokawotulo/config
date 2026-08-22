@@ -68,7 +68,6 @@
       environment.systemPackages =
         [
           # Development tools
-          pkgs.bun
           pkgs.direnv
           pkgs.fzf
           pkgs.git-lfs
