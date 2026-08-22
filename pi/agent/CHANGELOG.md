@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-22 18:48
+### Changed
+- grilling skill: added ordered questionnaire-design gates, matched visual guidance, and problem-indexed examples for ask-user rounds
+
 ## 2026-08-22 17:03
 ### Added
 - ask user: added mermaid diagram rendering support for option description
