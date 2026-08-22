@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-22 17:03
+### Added
+- ask user: added mermaid diagram rendering support for option description
+
 ## 2026-08-21 12:39
 ### Added
 - guardrails: protected main-host and workflow-child Bash/Shell calls with serialized CC Safety Net approval and session audit browsing

@@ -3,7 +3,6 @@ import type {
   Theme,
 } from "@earendil-works/pi-coding-agent";
 import {
-  Markdown,
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
@@ -15,6 +14,7 @@ import {
   keybindingHint,
   renderDialogFrame,
 } from "../../shared/ui/index.ts";
+import { renderOptionDescription } from "./description.ts";
 import { ICONS } from "./icons.ts";
 import { answerStateToResult, NOT_ANSWERED_LABEL } from "./results.ts";
 import { CUSTOM_OPTION_LABEL } from "./schema.ts";
@@ -65,16 +65,17 @@ function appendMarkdownPrefixed(
   prefix: string,
   markdown: string,
   markdownTheme: MarkdownTheme,
+  theme: Theme,
 ) {
   const prefixWidth = visibleWidth(prefix);
   const canIndent = prefixWidth < width;
   const contentWidth = canIndent ? width - prefixWidth : width;
-  const rendered = new Markdown(
+  const rendered = renderOptionDescription(
     markdown,
-    0,
-    0,
+    Math.max(1, contentWidth),
     markdownTheme,
-  ).render(Math.max(1, contentWidth));
+    theme,
+  );
 
   for (const line of rendered) {
     lines.push(canIndent ? `${prefix}${line}` : line);
@@ -309,6 +310,7 @@ function renderStackedOptions(
         "      ",
         option.description,
         state.markdownTheme,
+        theme,
       );
     }
 
@@ -395,12 +397,12 @@ function renderFocusedDetail(
       lines.push(theme.fg("muted", "Press Enter to write a custom answer."));
     }
   } else if (option.description) {
-    lines.push(...new Markdown(
+    lines.push(...renderOptionDescription(
       option.description,
-      0,
-      0,
+      Math.max(1, width),
       state.markdownTheme,
-    ).render(Math.max(1, width)));
+      theme,
+    ));
   } else {
     lines.push(theme.fg("muted", "No additional details."));
   }

@@ -9,6 +9,7 @@ import {
   type Editor,
   type MarkdownTheme,
 } from "@earendil-works/pi-tui";
+import { renderOptionDescription } from "./description.ts";
 import {
   MASTER_DETAIL_MIN_WIDTH,
   renderQuestionnaire,
@@ -774,6 +775,152 @@ describe("multiline answer rendering", () => {
     expect(output).not.toContain("> Quoted text");
     expect(lines.find((line) => line.includes("const value = 1;")))
       .toContain("\u001b[");
+  });
+
+  test.each([
+    ["flowchart", "flowchart LR\nA[Start] --> B[Done]", ["Start", "Done"]],
+    ["state", "stateDiagram-v2\n[*] --> Idle\nIdle --> [*]", ["Idle"]],
+    ["class", "classDiagram\nclass Animal", ["Animal"]],
+    [
+      "entity relationship",
+      "erDiagram\nCUSTOMER ||--o{ ORDER : places",
+      ["CUSTOMER", "ORDER"],
+    ],
+    [
+      "sequence",
+      "sequenceDiagram\nAlice->>Bob: Hi",
+      ["Alice", "Bob", "Hi"],
+    ],
+  ])("renders a clean %s Mermaid diagram", (_kind, source, labels) => {
+    const output = renderedDescription(
+      `\`\`\`mermaid\n${source}\n\`\`\``,
+      120,
+    ).map(stripAnsi).join("\n");
+
+    for (const label of labels) expect(output).toContain(label);
+    expect(output).not.toContain("```mermaid");
+  });
+
+  test.each([
+    ["master-detail", 100, true],
+    ["stacked", 60, false],
+  ])("renders Mermaid inside the %s questionnaire layout", (_name, width, masterDetail) => {
+    const view = descriptionView(
+      "```mermaid\nflowchart LR\nA[Start] --> B[Done]\n```",
+      width,
+    );
+    const output = view.lines.map(stripAnsi).join("\n");
+
+    expect(view.masterDetail).toBe(masterDetail);
+    expect(output).toContain("Start");
+    expect(output).toContain("Done");
+    expect(output).toContain("▶");
+    expect(output).not.toContain("```mermaid");
+    expect(view.lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+  });
+
+  test("renders Mermaid blocks with surrounding Markdown in source order", () => {
+    const output = renderedDescription([
+      "Before **bold** text",
+      "",
+      "```mermaid",
+      "flowchart LR",
+      "A[First] --> B[Second]",
+      "```",
+      "",
+      "Between",
+      "",
+      "~~~MERMAID",
+      "sequenceDiagram",
+      "Alice->>Bob: Hello",
+      "~~~",
+      "",
+      "After `code` text",
+    ].join("\n"), 120).map(stripAnsi).join("\n");
+
+    const before = output.indexOf("Before bold text");
+    const first = output.indexOf("First");
+    const between = output.indexOf("Between");
+    const alice = output.indexOf("Alice");
+    const after = output.indexOf("After code text");
+    expect(before).toBeGreaterThan(-1);
+    expect(first).toBeGreaterThan(before);
+    expect(between).toBeGreaterThan(first);
+    expect(alice).toBeGreaterThan(between);
+    expect(after).toBeGreaterThan(alice);
+    expect(output).not.toContain("```mermaid");
+    expect(output).not.toContain("~~~MERMAID");
+  });
+
+  test.each([
+    ["invalid", "not valid"],
+    ["unsupported", "mindmap\n  root((A))"],
+    ["warning-producing", "flowchart TD\nA[Start --> B"],
+  ])("falls back to fenced source for %s Mermaid", (_kind, source) => {
+    const output = renderedDescription(
+      `\`\`\`mermaid\n${source}\n\`\`\``,
+      120,
+    ).map(stripAnsi).join("\n");
+
+    expect(output).toContain("```mermaid");
+    expect(output).toContain(source.split("\n")[0] ?? source);
+  });
+
+  test("falls back to source when Mermaid art exceeds the description width", () => {
+    const output = renderedDescription([
+      "```mermaid",
+      "flowchart LR",
+      "A[This is a very long label that cannot fit] --> B[Another long label]",
+      "```",
+    ].join("\n"), 32);
+    const plain = output.map(stripAnsi).join("\n");
+
+    expect(plain).toContain("```mermaid");
+    expect(plain).toContain("flowchart");
+    expect(output.every((line) => visibleWidth(line) <= 32)).toBe(true);
+  });
+
+  test("leaves unclosed and nested Mermaid-looking fences as source", () => {
+    const unclosed = renderedDescription(
+      "```mermaid\nflowchart LR\nA --> B",
+      120,
+    ).map(stripAnsi).join("\n");
+    const nested = renderedDescription([
+      "````text",
+      "```mermaid",
+      "flowchart LR",
+      "A --> B",
+      "```",
+      "````",
+    ].join("\n"), 120).map(stripAnsi).join("\n");
+
+    expect(unclosed).toContain("```mermaid");
+    expect(unclosed).toContain("flowchart LR");
+    expect(nested).toContain("```mermaid");
+    expect(nested).toContain("flowchart LR");
+  });
+
+  test("uses Pi theme roles for Mermaid spans", () => {
+    const colors: string[] = [];
+    const semanticTheme = {
+      fg: (color: string, text: string) => {
+        colors.push(color);
+        return text;
+      },
+      bold: (text: string) => text,
+    } as unknown as Theme;
+    const lines = renderOptionDescription(
+      "```mermaid\nflowchart LR\nA[Start] -->|next| B[Done]\n```",
+      80,
+      markdownTheme,
+      semanticTheme,
+    );
+
+    expect(colors).toContain("borderMuted");
+    expect(colors).toContain("text");
+    expect(colors).toContain("accent");
+    expect(colors).toContain("muted");
+    expect(lines.every((line) => visibleWidth(line) <= 80)).toBe(true);
   });
 
   test("wraps Markdown descriptions within the dialog width", () => {
