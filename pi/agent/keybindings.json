@@ -1,3 +1,6 @@
 {
-  "tui.editor.cursorLeft": "left"
+  "tui.editor.cursorLeft": "left",
+  "app.model.select": "ctrl+shift+m",
+  "app.session.tree": "ctrl+shift+l",
+  "app.tree.filter.labeledOnly": []
 }

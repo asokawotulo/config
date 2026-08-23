@@ -113,4 +113,11 @@ export default function sessionManagerExtension(pi: ExtensionAPI) {
       }
     },
   });
+
+  pi.registerShortcut("ctrl+l", {
+    description: "Manage sessions for the current directory",
+    handler: () => {
+      pi.sendUserMessage("/sessions", { expandPromptTemplates: true });
+    },
+  });
 }
