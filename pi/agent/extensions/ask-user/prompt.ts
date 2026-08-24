@@ -8,4 +8,5 @@ export const ASK_USER_PROMPT_GUIDELINES = [
   "Use ask_user when answers can be usefully presented as 2-5 choices.",
   "Do not add a free-form option to ask_user questions; the tool always adds Write your own answer.",
   "Treat unanswered ask_user questions as intentionally unanswered and do not infer an answer.",
+  "For Mermaid option descriptions, wrap prose labels in double quotes, encode embedded double quotes as `&quot;`, and split disconnected flows into separate blocks when a combined graph may be too wide.",
 ];

@@ -104,7 +104,7 @@ Vertical scrolling is acceptable. Keep the changed region in a consistent place 
 
 Put Mermaid in an option description with a fenced `mermaid` block. Keep nearby prose sufficient to explain the result and cost.
 
-Pi renders a supported, warning-free diagram only when it fits the available description width. Invalid, warning-producing, unsupported, and oversized graphs appear as fenced source. If a graph is too wide:
+Pi renders a supported, warning-free diagram only when it fits the available description width. Invalid, warning-producing, unsupported, and oversized graphs appear as fenced source. Wrap prose labels in double quotes and encode embedded double quotes as `&quot;`. When disconnected flows make a graph too wide, split them into separate Mermaid blocks. For other oversized graphs:
 
 1. shorten labels or change direction without removing meaningful content;
 2. try a complete ASCII rendering when it preserves the relationship;

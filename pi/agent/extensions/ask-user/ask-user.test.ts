@@ -866,6 +866,88 @@ describe("multiline answer rendering", () => {
     expect(output).toContain(source.split("\n")[0] ?? source);
   });
 
+  test.each([
+    ...[...`!#$%&'()*+,-./:;<=>?@[\\]^_\`{|}~`].map(
+      (character) => [character, character] as const,
+    ),
+    ["&quot;", '"'],
+    ["%%", "%%"],
+    ["-->", "-->"],
+    ["-..->", "-..->"],
+    [":::", ":::"],
+    ["–", "–"],
+    ["—", "—"],
+    ["‘", "‘"],
+    ["’", "’"],
+    ["“", "“"],
+    ["”", "”"],
+    ["…", "…"],
+    ["→", "→"],
+    ["✓", "✓"],
+    ["✗", "✗"],
+  ])("renders a quoted label containing special text %s", (source, rendered) => {
+    const output = renderedDescription(
+      `\`\`\`mermaid\nflowchart TD\nA["Before ${source} after"] --> B[Done]\n\`\`\``,
+      120,
+    ).map(stripAnsi).join("\n");
+
+    expect(output).toContain(`Before ${rendered} after`);
+    expect(output).not.toContain("```mermaid");
+  });
+
+  test.each([
+    [
+      "FEHAP guard",
+      [
+        "```mermaid",
+        "flowchart TD",
+        "U[Update] --> UD[DB check]",
+        "UD -->|duplicate| UE[Not-unique error]",
+        "UD -->|unique| US[Cognito stage]",
+        "```",
+        "",
+        "```mermaid",
+        "flowchart TD",
+        "V[Verify] --> CV[Cognito verify]",
+        "CV --> VD[DB recheck]",
+        'VD -->|duplicate| VE["Error; no FEHAP write"]',
+        "VD -->|unique| FR[FEHAP reconcile]",
+        "```",
+      ].join("\n"),
+      ["Update", "Verify", "Error; no FEHAP write", "FEHAP reconcile"],
+    ],
+    [
+      "Cognito guard",
+      [
+        "```mermaid",
+        "flowchart TD",
+        "U[Update] --> UD[DB check]",
+        "UD -->|duplicate| UE[Not-unique error]",
+        "UD -->|unique| US[Cognito stage]",
+        "```",
+        "",
+        "```mermaid",
+        "flowchart TD",
+        "V[Verify] --> PR[Read pending phone]",
+        "PR --> VD[DB recheck]",
+        'VD -->|duplicate| VE["Error; no Cognito change"]',
+        "VD -->|unique| CV[Cognito verify]",
+        "CV --> FR[FEHAP reconcile]",
+        "```",
+      ].join("\n"),
+      ["Update", "Verify", "Error; no Cognito change", "FEHAP reconcile"],
+    ],
+  ])("renders the split reported %s flow in questionnaire layouts", (_name, description, labels) => {
+    for (const [width, masterDetail] of [[100, true], [60, false]] as const) {
+      const view = descriptionView(description, width);
+      const output = view.lines.map(stripAnsi).join("\n");
+
+      expect(view.masterDetail).toBe(masterDetail);
+      for (const label of labels) expect(output).toContain(label);
+      expect(output).not.toContain("```mermaid");
+    }
+  });
+
   test("falls back to source when Mermaid art exceeds the description width", () => {
     const output = renderedDescription([
       "```mermaid",

@@ -11,7 +11,7 @@ const OptionSchema = Type.Object({
   description: Type.Optional(
     Type.String({
       description:
-        "Optional multiline Markdown explanation shown under the option. Fenced `mermaid` blocks render as terminal diagrams when valid and within the available width.",
+        "Optional multiline Markdown explanation shown under the option. Fenced `mermaid` blocks render as terminal diagrams when valid and within the available width. Wrap prose labels in double quotes, encode embedded double quotes as `&quot;`, and split disconnected flows into separate blocks when needed to fit.",
     }),
   ),
 });
