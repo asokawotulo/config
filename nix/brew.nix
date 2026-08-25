@@ -15,6 +15,7 @@
 
       # Network & testing tools
       "aria2"
+      "yt-dlp"
 
       # Infrastructure/DevOps
       "tfenv"
@@ -26,6 +27,9 @@
 
       # Python Dependencies
       "weasyprint"
+
+      # Misc
+      "ffmpeg"
     ];
     casks = [
       # General apps
