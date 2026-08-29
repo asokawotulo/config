@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-29 23:11
+### Fixed
+- UI customization: restored the fullscreen sidebar on Pi 0.84.3
+
 ## 2026-08-29 15:27
 ### Added
 - guardrails: notified Supacode when a blocked command requires approval

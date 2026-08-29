@@ -15,6 +15,7 @@ export const SUPPORTED_PI_VERSIONS = new Set([
   "0.84.0",
   "0.84.1",
   "0.84.2",
+  "0.84.3",
 ]);
 export const SIDEBAR_MIN_TERMINAL_WIDTH = 100;
 
