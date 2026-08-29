@@ -9,7 +9,8 @@
     "opencode/*"
   ],
   "packages": [
-    "npm:@ff-labs/pi-fff"
+    "npm:@ff-labs/pi-fff",
+    "npm:pi-mcp-adapter"
   ],
   "compaction": {
     "enabled": false
