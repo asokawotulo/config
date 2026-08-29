@@ -5,6 +5,9 @@ import type {
   Theme,
 } from "@earendil-works/pi-coding-agent";
 import {
+  deleteAllKittyImages,
+  getCapabilities,
+  setCapabilities,
   truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
@@ -172,24 +175,51 @@ export function renderDialogFrame(
 }
 
 /** Show a visible custom dialog and notify once after its overlay is mounted. */
-export function showDialog<Result>(
+export async function showDialog<Result>(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   factory: DialogFactory<Result>,
   options: ShowDialogOptions,
 ): Promise<Result> {
   let notified = false;
-  return ctx.ui.custom(factory, {
-    overlay: true,
-    overlayOptions: options.overlayOptions,
-    onHandle: (handle) => {
-      if (!notified) {
-        notified = true;
-        pi.events.emit(SUPACODE_NOTIFICATION_EVENT, options.notification);
-      }
-      options.onHandle?.(handle);
-    },
-  });
+  let tui: TUI | undefined;
+  let kittyCapabilities: ReturnType<typeof getCapabilities> | undefined;
+
+  try {
+    return await ctx.ui.custom(
+      (dialogTui, theme, keybindings, done) => {
+        tui = dialogTui;
+        return factory(dialogTui, theme, keybindings, done);
+      },
+      {
+        overlay: true,
+        overlayOptions: options.overlayOptions,
+        onHandle: (handle) => {
+          if (!kittyCapabilities && tui) {
+            const capabilities = getCapabilities();
+            if (capabilities.images === "kitty") {
+              kittyCapabilities = capabilities;
+              tui.terminal.write(deleteAllKittyImages());
+              setCapabilities({ ...capabilities, images: null });
+              tui.invalidate();
+              tui.requestRender(true);
+            }
+          }
+          if (!notified) {
+            notified = true;
+            pi.events.emit(SUPACODE_NOTIFICATION_EVENT, options.notification);
+          }
+          options.onHandle?.(handle);
+        },
+      },
+    );
+  } finally {
+    if (kittyCapabilities && tui) {
+      setCapabilities(kittyCapabilities);
+      tui.invalidate();
+      tui.requestRender(true);
+    }
+  }
 }
 
 export function centeredDialogOverlay(

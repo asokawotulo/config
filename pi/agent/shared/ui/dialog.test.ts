@@ -5,7 +5,15 @@ import type {
   KeybindingsManager,
   Theme,
 } from "@earendil-works/pi-coding-agent";
-import { visibleWidth, type OverlayHandle, type TUI } from "@earendil-works/pi-tui";
+import {
+  deleteAllKittyImages,
+  getCapabilities,
+  resetCapabilitiesCache,
+  setCapabilities,
+  visibleWidth,
+  type OverlayHandle,
+  type TUI,
+} from "@earendil-works/pi-tui";
 import {
   centeredDialogOverlay,
   DialogComponent,
@@ -135,6 +143,129 @@ describe("shared dialog frame", () => {
     }]);
     expect(delegatedHandles).toBe(2);
   });
+
+  test("hides Kitty images while mounted and redraws them after closing", async () => {
+    const writes: string[] = [];
+    const forcedRenders: boolean[] = [];
+    const imageProtocols: unknown[] = [];
+    let invalidations = 0;
+    const tui = {
+      terminal: { write: (data: string) => writes.push(data) },
+      invalidate: () => invalidations++,
+      requestRender: (force?: boolean) => forcedRenders.push(force ?? false),
+    } as unknown as TUI;
+    const pi = {
+      events: { emit: () => {} },
+    } as unknown as ExtensionAPI;
+    const ctx = {
+      ui: {
+        custom: async (factory: any, customOptions: any) => {
+          await factory(tui, theme, {} as KeybindingsManager, () => {});
+          customOptions.onHandle?.({} as OverlayHandle);
+          imageProtocols.push(getCapabilities().images);
+          customOptions.onHandle?.({} as OverlayHandle);
+          imageProtocols.push(getCapabilities().images);
+          return "closed";
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+    try {
+      await showDialog(
+        pi,
+        ctx,
+        () => ({ render: () => [], invalidate() {} }),
+        {
+          notification: { title: "Test", body: "Kitty dialog" },
+          overlayOptions: {},
+        },
+      );
+    } finally {
+      resetCapabilitiesCache();
+    }
+
+    expect(writes).toEqual([deleteAllKittyImages()]);
+    expect(imageProtocols).toEqual([null, null]);
+    expect(invalidations).toBe(2);
+    expect(forcedRenders).toEqual([true, true]);
+  });
+
+  test("restores Kitty image rendering when the dialog rejects", async () => {
+    const forcedRenders: boolean[] = [];
+    const tui = {
+      terminal: { write: () => {} },
+      invalidate: () => {},
+      requestRender: (force?: boolean) => forcedRenders.push(force ?? false),
+    } as unknown as TUI;
+    const ctx = {
+      ui: {
+        custom: async (factory: any, customOptions: any) => {
+          await factory(tui, theme, {} as KeybindingsManager, () => {});
+          customOptions.onHandle?.({} as OverlayHandle);
+          throw new Error("dialog failed");
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+    try {
+      await expect(
+        showDialog(
+          { events: { emit: () => {} } } as unknown as ExtensionAPI,
+          ctx,
+          () => ({ render: () => [], invalidate() {} }),
+          {
+            notification: { title: "Test", body: "Failing dialog" },
+            overlayOptions: {},
+          },
+        ),
+      ).rejects.toThrow("dialog failed");
+    } finally {
+      resetCapabilitiesCache();
+    }
+
+    expect(forcedRenders).toEqual([true, true]);
+  });
+
+  test.each([null, "iterm2"] as const)(
+    "leaves %s image rendering untouched",
+    async (images) => {
+      const writes: string[] = [];
+      const forcedRenders: boolean[] = [];
+      const tui = {
+        terminal: { write: (data: string) => writes.push(data) },
+        requestRender: (force?: boolean) => forcedRenders.push(force ?? false),
+      } as unknown as TUI;
+      const ctx = {
+        ui: {
+          custom: async (factory: any, customOptions: any) => {
+            await factory(tui, theme, {} as KeybindingsManager, () => {});
+            customOptions.onHandle?.({} as OverlayHandle);
+            return "closed";
+          },
+        },
+      } as unknown as ExtensionContext;
+
+      setCapabilities({ images, trueColor: true, hyperlinks: true });
+      try {
+        await showDialog(
+          { events: { emit: () => {} } } as unknown as ExtensionAPI,
+          ctx,
+          () => ({ render: () => [], invalidate() {} }),
+          {
+            notification: { title: "Test", body: "Non-Kitty dialog" },
+            overlayOptions: {},
+          },
+        );
+      } finally {
+        resetCapabilitiesCache();
+      }
+
+      expect(writes).toEqual([]);
+      expect(forcedRenders).toEqual([]);
+    },
+  );
 
   test("formats hints from configured keybindings", () => {
     const keybindings = {
