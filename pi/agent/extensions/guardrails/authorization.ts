@@ -30,6 +30,7 @@ export interface AuthorizeGuardrailCommandOptions {
   ctx: ExtensionContext;
   signal?: AbortSignal;
   record: (decision: GuardrailDecisionChain) => void;
+  onApprovalRequired?: () => void;
 }
 
 function analysisError(command: string, error: unknown): GuardrailAnalysisStep {
@@ -120,10 +121,16 @@ export async function authorizeGuardrailCommand(
           finish(options, startedAt, steps, "denied", reason);
           return { block: reason };
         }
-        const choice = await options.ctx.ui.select(
+        const selection = options.ctx.ui.select(
           `CC Safety Net blocked this command\n\n${message(command, blocked)}`,
           ["Allow once", "Edit command", "Deny"],
         );
+        try {
+          options.onApprovalRequired?.();
+        } catch {
+          // Notification delivery must not affect command authorization.
+        }
+        const choice = await selection;
         if (choice === "Allow once") {
           steps.push({ kind: "user", at: Date.now(), action: "allow-once" });
           const reason = blocked.reason ?? "Blocked by CC Safety Net";

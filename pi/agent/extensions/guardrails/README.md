@@ -20,6 +20,8 @@ Commands CC Safety Net allows run without a prompt or audit entry. A blocked com
 
 Headless sessions cannot approve blocked commands. The complete blocked interaction remains serialized until it reaches a final result, so concurrent subagents cannot overlap prompts or editors.
 
+When an approval prompt becomes active, Guardrails emits a generic Supacode notification. Queued requests notify only when their prompt reaches the front of the queue. The notification omits command text because commands may contain secrets. Notification failures do not affect authorization.
+
 ## Audit
 
 Guardrails stores blocked, failed, denied, edited, and overridden decision chains as `guardrails:decision` custom entries in the Pi session. Clean automatic allows are omitted. Each retained chain contains the full command text, CC Safety Net reason, rule and segment, user actions, edited commands, and final outcome.

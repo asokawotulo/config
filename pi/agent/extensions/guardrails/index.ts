@@ -7,6 +7,10 @@ import {
   type GuardrailsDecisionEvent,
   type GuardrailsStatusRequest,
 } from "../../lib/guardrails-events.ts";
+import {
+  SUPACODE_NOTIFICATION_EVENT,
+  type SupacodeNotification,
+} from "../../lib/supacode-events.ts";
 import { CliGuardrailAnalyzer, type GuardrailAnalyzer } from "./analyzer.ts";
 import { guardrailDecisionLabel, parseGuardrailDecision } from "./audit.ts";
 import { authorizeGuardrailCommand, GuardrailApprovalQueue } from "./authorization.ts";
@@ -54,6 +58,14 @@ export function createGuardrailsExtension(options: GuardrailsExtensionOptions = 
       pi.events.emit(GUARDRAILS_DECISION_EVENT, event);
     };
 
+    const notifyApprovalRequired = () => {
+      const notification: SupacodeNotification = {
+        title: "Pi needs your input",
+        body: "Review blocked Guardrails command",
+      };
+      pi.events.emit(SUPACODE_NOTIFICATION_EVENT, notification);
+    };
+
     const authorize = (
       command: string,
       cwd: string,
@@ -61,7 +73,18 @@ export function createGuardrailsExtension(options: GuardrailsExtensionOptions = 
       source: GuardrailSource,
       ctx: ExtensionContext,
       signal?: AbortSignal,
-    ) => authorizeGuardrailCommand({ analyzer, queue, command, cwd, sessionId, source, ctx, signal, record });
+    ) => authorizeGuardrailCommand({
+      analyzer,
+      queue,
+      command,
+      cwd,
+      sessionId,
+      source,
+      ctx,
+      signal,
+      record,
+      onApprovalRequired: notifyApprovalRequired,
+    });
 
     registerGuardrailShellHook(pi, (command, ctx) => authorize(
       command,

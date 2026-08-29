@@ -37,6 +37,7 @@ function authorize(
   ctx: ExtensionContext,
   records: GuardrailDecisionChain[],
   queue = new GuardrailApprovalQueue(),
+  onApprovalRequired?: () => void,
 ) {
   return authorizeGuardrailCommand({
     analyzer,
@@ -47,6 +48,7 @@ function authorize(
     source: { kind: "main" },
     ctx,
     record: (record) => records.push(record),
+    onApprovalRequired,
   });
 }
 
@@ -145,24 +147,75 @@ describe("Guardrails analyzer and authorization", () => {
     expect(parseGuardrailDecision(records[0])).toEqual(records[0]);
   });
 
-  test("serializes complete blocked interactions", async () => {
+  test("notifies for each active approval prompt without changing authorization", async () => {
+    let notifications = 0;
+    const notify = () => { notifications++; };
+
+    await authorize(
+      new ScriptedAnalyzer([{ result: "allowed" }]),
+      context({ select: () => { throw new Error("unexpected prompt"); } }),
+      [],
+      new GuardrailApprovalQueue(),
+      notify,
+    );
+    expect(notifications).toBe(0);
+
+    await authorize(
+      new ScriptedAnalyzer([{ result: "blocked", reason: "danger" }]),
+      context({}, false),
+      [],
+      new GuardrailApprovalQueue(),
+      notify,
+    );
+    expect(notifications).toBe(0);
+
+    const choices = ["Edit command", "Deny"];
+    await authorize(
+      new ScriptedAnalyzer([
+        { result: "blocked", reason: "danger" },
+        { result: "blocked", reason: "still dangerous" },
+      ]),
+      context({
+        select: async () => choices.shift(),
+        editor: async () => "git reset --hard HEAD~1",
+      }),
+      [],
+      new GuardrailApprovalQueue(),
+      notify,
+    );
+    expect(notifications).toBe(2);
+
+    await expect(authorize(
+      new ScriptedAnalyzer([{ result: "blocked", reason: "danger" }]),
+      context({ select: async () => "Allow once" }),
+      [],
+      new GuardrailApprovalQueue(),
+      () => { throw new Error("notification failed"); },
+    )).resolves.toEqual({ command: "git reset --hard" });
+  });
+
+  test("serializes complete blocked interactions and notifies only the active prompt", async () => {
     const queue = new GuardrailApprovalQueue();
     const records: GuardrailDecisionChain[] = [];
     const resolvers: Array<(value: string) => void> = [];
     let prompts = 0;
+    let notifications = 0;
     const ctx = context({
       select: () => {
         prompts++;
         return new Promise<string>((resolve) => resolvers.push(resolve));
       },
     });
-    const first = authorize(new ScriptedAnalyzer([{ result: "blocked", reason: "one" }]), ctx, records, queue);
-    const second = authorize(new ScriptedAnalyzer([{ result: "blocked", reason: "two" }]), ctx, records, queue);
+    const notify = () => { notifications++; };
+    const first = authorize(new ScriptedAnalyzer([{ result: "blocked", reason: "one" }]), ctx, records, queue, notify);
+    const second = authorize(new ScriptedAnalyzer([{ result: "blocked", reason: "two" }]), ctx, records, queue, notify);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(prompts).toBe(1);
+    expect(notifications).toBe(1);
     resolvers.shift()!("Deny");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(prompts).toBe(2);
+    expect(notifications).toBe(2);
     resolvers.shift()!("Deny");
     await Promise.all([first, second]);
   });
@@ -225,6 +278,8 @@ describe("Guardrails hooks and extension service", () => {
     const handlers = new Map<string, Function>();
     const commands = new Map<string, any>();
     const entries: Array<{ customType: string; data: unknown }> = [];
+    const notifications: unknown[] = [];
+    events.on("supacode:notification", (data) => notifications.push(data));
     const pi = {
       events,
       on(name: string, handler: Function) { handlers.set(name, handler); },
@@ -245,6 +300,11 @@ describe("Guardrails hooks and extension service", () => {
     });
     expect(entries).toHaveLength(1);
     expect(parseGuardrailDecision(entries[0]?.data)).toMatchObject({ outcome: "denied" });
+    expect(notifications).toEqual([{
+      title: "Pi needs your input",
+      body: "Review blocked Guardrails command",
+    }]);
+    expect(JSON.stringify(notifications)).not.toContain("git reset --hard");
     const command = commands.get("guardrails");
     expect(command).toBeDefined();
     let opened = "";

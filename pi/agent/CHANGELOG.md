@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-29 15:27
+### Added
+- guardrails: notified Supacode when a blocked command requires approval
+
 ## 2026-08-22 18:48
 ### Changed
 - grilling skill: added ordered questionnaire-design gates, matched visual guidance, and problem-indexed examples for ask-user rounds
