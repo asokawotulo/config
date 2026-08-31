@@ -1,7 +1,6 @@
 ---
 name: explore-codebase
 description: Explore and explain a local codebase from repository evidence.
-disable-model-invocation: true
 ---
 
 # Explore a codebase
