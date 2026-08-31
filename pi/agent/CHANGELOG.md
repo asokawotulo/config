@@ -3,6 +3,7 @@
 ## 2026-08-31 21:39
 ### Changed
 - compatibility: updated Pi dependencies and custom extensions for Pi 0.84.4
+- Supacode: reported user prompt waits separately from active agent work and delayed completion until the agent fully settles
 
 ## 2026-08-29 23:11
 ### Fixed

@@ -17,7 +17,9 @@
  * Hook event mapping:
  *   extension load      -> session_start  (agent presence badge)
  *   Pi agent_start      -> busy
- *   Pi agent_end        -> idle + notification with last_assistant_message
+ *   Pi ui_prompt_start  -> idle while Pi waits for the user
+ *   Pi ui_prompt_end    -> busy when agent work resumes
+ *   Pi agent_settled    -> idle + notification with last_assistant_message
  *   Pi session_shutdown -> session_end + idle (defensive activity reset)
  */
 
@@ -30,6 +32,32 @@ import {
 import { utf8BytePrefix } from "../../lib/text.ts";
 
 const AGENT = "pi";
+
+type ActivityPresence = "busy" | "idle";
+type PromptPhase = "start" | "end";
+
+export interface PromptActivityTransition {
+  waitingForUser: boolean;
+  presence?: ActivityPresence;
+}
+
+/** Keep idle user-opened dialogs out of the agent activity state. */
+export function promptActivityTransition(
+  phase: PromptPhase,
+  waitingForUser: boolean,
+  agentIdle: boolean,
+): PromptActivityTransition {
+  if (phase === "start") {
+    if (agentIdle || waitingForUser) return { waitingForUser };
+    return { waitingForUser: true, presence: "idle" };
+  }
+
+  if (!waitingForUser) return { waitingForUser: false };
+  return {
+    waitingForUser: false,
+    ...(agentIdle ? {} : { presence: "busy" as const }),
+  };
+}
 
 let lastWarnedAt = 0;
 const WARN_INTERVAL_MS = 60_000;
@@ -162,18 +190,43 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
+  let waitingForUser = false;
+
   pi.on("agent_start", (_event, _ctx) => {
+    waitingForUser = false;
     emitPresence("busy");
   });
 
-  pi.on("agent_end", (_event, ctx) => {
+  pi.on("ui_prompt_start", (_event, ctx) => {
+    const transition = promptActivityTransition(
+      "start",
+      waitingForUser,
+      ctx.isIdle(),
+    );
+    waitingForUser = transition.waitingForUser;
+    if (transition.presence) emitPresence(transition.presence);
+  });
+
+  pi.on("ui_prompt_end", (_event, ctx) => {
+    const transition = promptActivityTransition(
+      "end",
+      waitingForUser,
+      ctx.isIdle(),
+    );
+    waitingForUser = transition.waitingForUser;
+    if (transition.presence) emitPresence(transition.presence);
+  });
+
+  pi.on("agent_settled", (_event, ctx) => {
+    waitingForUser = false;
     // Atomic state-set: `idle` overwrites whatever was running on the
-    // Supacode side (turn-level Stop equivalent).
+    // Supacode side only after retries and queued continuations have settled.
     emitPresence("idle");
     emitNotification({ body: lastAssistantText(ctx) });
   });
 
   pi.on("session_shutdown", (_event, _ctx) => {
+    waitingForUser = false;
     emitPresence("session_end");
     emitPresence("idle");
   });
