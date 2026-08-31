@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-31 21:39
+### Changed
+- compatibility: updated Pi dependencies and custom extensions for Pi 0.84.4
+
 ## 2026-08-29 23:11
 ### Fixed
 - UI customization: restored the fullscreen sidebar on Pi 0.84.3

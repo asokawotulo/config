@@ -159,6 +159,9 @@ describe("Pi 0.84.0 fullscreen layout guard", () => {
     ).toBeDefined();
     expect(
       resolvePi0840FullscreenLayout(makeCanonical().tui, "0.84.4"),
+    ).toBeDefined();
+    expect(
+      resolvePi0840FullscreenLayout(makeCanonical().tui, "0.84.5"),
     ).toBeUndefined();
     expect(
       resolvePi0840FullscreenLayout(makeCanonical().tui, "0.83.0"),
