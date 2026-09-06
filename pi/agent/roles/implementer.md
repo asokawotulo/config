@@ -1,7 +1,7 @@
 ---
 description: Implements a focused change and verifies it
-model: openai-codex/gpt-5.6-sol
-thinking: high
+model: openai-codex/gpt-6-astra
+thinking: medium
 tools: [read, bash, edit, write]
 skills: [diff]
 ---

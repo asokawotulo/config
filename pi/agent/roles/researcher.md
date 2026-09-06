@@ -1,6 +1,6 @@
 ---
 description: Investigates a codebase and returns concise evidence without modifying files
-model: openai-codex/gpt-5.6-sol
+model: openai-codex/gpt-6-astra
 thinking: medium
 tools: [read, grep, find, ls, bash]
 skills: []
