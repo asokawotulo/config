@@ -327,6 +327,50 @@ describe("ui customization docked lifecycle", () => {
     ]);
   });
 
+  test("keeps a waiting footer alive and installs after the root mounts", async () => {
+    const handlers = new Map<string, (event: unknown, ctx: ExtensionContext) => unknown>();
+    const notices: string[] = [];
+    const fixture = makeFullscreenTui();
+    const mutableTui = fixture.tui as TUI & { layoutRoot?: Component };
+    mutableTui.layoutRoot = undefined;
+    let footer: Component | undefined;
+    const pi = {
+      on(event: string, handler: (event: unknown, ctx: ExtensionContext) => unknown) {
+        handlers.set(event, handler);
+      },
+      registerShortcut() {},
+      registerCommand() {},
+      events: { on() {}, emit() {} },
+      exec: async () => ({ code: 1, stdout: "", stderr: "", killed: false }),
+    } as unknown as ExtensionAPI;
+    const ctx = {
+      mode: "tui",
+      cwd: "/repo",
+      ui: {
+        theme: identityTheme(),
+        notify: (message: string) => notices.push(message),
+        setFooter(factory: ((tui: TUI) => Component) | undefined) {
+          footer = factory?.(fixture.tui);
+        },
+      },
+      sessionManager: { getSessionId: () => "session" },
+    } as unknown as ExtensionContext;
+    uiCustomization(pi);
+    handlers.get("session_start")!({}, ctx);
+    const waitingFooter = footer;
+    await Promise.resolve();
+    expect(footer).toBeDefined();
+    expect(notices).toEqual([]);
+    mutableTui.layoutRoot = fixture.root;
+    footer!.render(120);
+    await Promise.resolve();
+    expect(footer).toBe(waitingFooter);
+    expect(stack(stack(fixture.root).children[0]!).entries).toHaveLength(2);
+    expect(notices).toEqual([]);
+    handlers.get("session_shutdown")!({}, ctx);
+    expect(fixture.root.children).toEqual([fixture.transcript, fixture.dock]);
+  });
+
   test("warns instead of opening outside TUI mode", () => {
     type ShortcutHandler = (ctx: ExtensionContext) => unknown;
     let shortcutHandler: ShortcutHandler | undefined;
@@ -404,7 +448,9 @@ describe("ui customization docked lifecycle", () => {
     footer?.render(120);
     footer?.invalidate();
     await Promise.resolve();
-    expect(notices).toHaveLength(1);
+    expect(notices).toEqual([
+      "Sidebar disabled: unexpected-root. Using Pi's default layout.",
+    ]);
     expect(footer).toBeUndefined();
     expect((tui as unknown as { layoutRoot: Component }).layoutRoot).toBe(
       incompatibleRoot,

@@ -14,7 +14,7 @@ import {
 } from "../../lib/dynamic-workflow-events.ts";
 import type { SidebarMetadata } from "./metadata.ts";
 
-export const SIDEBAR_WIDTH = 50;
+export const SIDEBAR_WIDTH = 40;
 
 const CHROME_ROWS = 2;
 const OPTIONAL_PRIORITIES = [0, 10, 20, 25, 30, 50, 55, 60] as const;
@@ -185,10 +185,7 @@ function expandedRows(metadata: SidebarMetadata): SidebarRow[] {
   ];
 }
 
-function compactRows(
-  metadata: SidebarMetadata,
-  budget: number,
-): SidebarRow[] {
+function compactRows(metadata: SidebarMetadata, budget: number): SidebarRow[] {
   const rows: SidebarRow[] = [
     { text: `Directory  ${metadata.directory}`, heading: true },
     { text: `Session    ${metadata.sessionName}`, heading: true },
@@ -207,10 +204,7 @@ function compactRows(
   }
 
   const needsOverflow = metadata.workflowRuns.length > workflowBudget;
-  const visibleCount = Math.max(
-    0,
-    workflowBudget - (needsOverflow ? 1 : 0),
-  );
+  const visibleCount = Math.max(0, workflowBudget - (needsOverflow ? 1 : 0));
   metadata.workflowRuns.slice(0, visibleCount).forEach((run, index) => {
     const appearance = workflowAppearance(run.status);
     const prefix = index === 0 ? "Workflow   " : "           ";

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-07 23:06
+### Changed
+- UI customization: replaced the Pi version allowlist with runtime layout checks, enabling the sidebar on Pi 0.85.1 without changing dependency pins
+- UI customization: used public stack methods for layout changes and added ownership checks to avoid overwriting another extension's layout
+### Fixed
+- UI customization: waited for the fullscreen root to mount and reported layout mismatch reasons when falling back to Pi's default footer
+
 ## 2026-08-31 21:39
 ### Changed
 - compatibility: updated Pi dependencies and custom extensions for Pi 0.84.4

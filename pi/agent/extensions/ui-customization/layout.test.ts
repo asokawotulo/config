@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { existsSync } from "node:fs";
 import {
   HStack,
   ScrollView,
@@ -10,13 +11,17 @@ import {
   type TUI,
 } from "@earendil-works/pi-tui";
 import {
-  Pi0840SidebarLayoutAdapter,
-  resolvePi0840FullscreenLayout,
+  SidebarLayoutAdapter,
+  probeFullscreenLayout,
   SIDEBAR_MIN_TERMINAL_WIDTH,
-  SUPPORTED_PI_VERSION,
 } from "./layout.ts";
 
 const VIEWPORT_TUI = Symbol.for("@earendil-works/pi-tui/viewport");
+// Test-only upstream import. Older hosts predate this extracted factory.
+const chatViewportModule = new URL(
+  "modes/interactive/chat-viewport.js",
+  import.meta.resolve("@earendil-works/pi-coding-agent"),
+);
 
 class Lines implements Component {
   constructor(public lines: string[]) {}
@@ -118,11 +123,7 @@ function makeCanonical(
   ]);
   tui.setLayoutRoot(root);
   const sidebar = new Lines(["sidebar"]);
-  const adapter = new Pi0840SidebarLayoutAdapter(
-    tui,
-    sidebar,
-    SUPPORTED_PI_VERSION,
-  );
+  const adapter = new SidebarLayoutAdapter(tui, sidebar);
   return {
     adapter,
     components,
@@ -140,65 +141,184 @@ function renderNative(tui: TuiAltScreen): void {
   tui.renderNow(true);
 }
 
-describe("Pi 0.84.0 fullscreen layout guard", () => {
-  test("accepts the installed runtime shape and rejects version, mode, counts, order, options, and synchronization drift", () => {
-    expect(
-      resolvePi0840FullscreenLayout(
-        makeCanonical().tui,
-        SUPPORTED_PI_VERSION,
-      ),
-    ).toBeDefined();
-    expect(
-      resolvePi0840FullscreenLayout(makeCanonical().tui, "0.84.1"),
-    ).toBeDefined();
-    expect(
-      resolvePi0840FullscreenLayout(makeCanonical().tui, "0.84.2"),
-    ).toBeDefined();
-    expect(
-      resolvePi0840FullscreenLayout(makeCanonical().tui, "0.84.3"),
-    ).toBeDefined();
-    expect(
-      resolvePi0840FullscreenLayout(makeCanonical().tui, "0.84.4"),
-    ).toBeDefined();
-    expect(
-      resolvePi0840FullscreenLayout(makeCanonical().tui, "0.84.5"),
-    ).toBeUndefined();
-    expect(
-      resolvePi0840FullscreenLayout(makeCanonical().tui, "0.83.0"),
-    ).toBeUndefined();
+describe("fullscreen layout contract", () => {
+  test.skipIf(!existsSync(chatViewportModule))(
+    "accepts the host's actual chat viewport factory and preserves native layout",
+    async () => {
+      const { createChatViewport } = await import(chatViewportModule.href);
+      const fixture = makeCanonical();
+      const c = fixture.components;
+      const viewport = createChatViewport({
+        document: c[0], pendingMessages: c[1], status: c[2],
+        widgetsAbove: c[3], editor: c[4], widgetsBelow: c[5], footer: c[6],
+      });
+      fixture.tui.setLayoutRoot(viewport.root);
+      expect(probeFullscreenLayout(fixture.tui).status).toBe("ready");
+      expect(fixture.adapter.setSidebarVisible(true)).toEqual({ status: "installed" });
+      renderNative(fixture.tui);
+      const frame = runtime(fixture.tui).currentLayout!;
+      expect(frame.root.children[0]!.children.map((child) => child.rect.width)).toEqual([70, 50]);
+      expect(frame.root.children[1]!.rect.width).toBe(120);
+      expect(frame.primaryScrollView).toBe(viewport.transcript);
+      expect(fixture.adapter.uninstall()).toBe(true);
+      expect(viewport.root.children[0]).toBe(viewport.transcript);
+      fixture.tui.stop();
+    },
+  );
 
-    const regular = new TuiMainScreen(new TestTerminal(120, 30));
-    expect(resolvePi0840FullscreenLayout(regular)).toBeUndefined();
+  test("accepts the canonical structure without a version argument", () => {
+    const fixture = makeCanonical();
+    const probe = probeFullscreenLayout(fixture.tui);
+    expect(probe.status).toBe("ready");
+    if (probe.status !== "ready") throw new Error("Expected canonical layout");
+    expect(probe.snapshot.root).toBe(fixture.root);
+    expect(probe.snapshot.rootEntries[0]).not.toBe(stack(fixture.root).entries[0]);
+    expect(probe.snapshot.dockEntries[0]).not.toBe(stack(fixture.dock).entries[0]);
+  });
 
+  test("distinguishes regular mode, unmounted roots, and missing capabilities", () => {
+    expect(probeFullscreenLayout(new TuiMainScreen(new TestTerminal(120, 30))))
+      .toEqual({ status: "waiting" });
+    const fixture = makeCanonical();
+    fixture.tui.setLayoutRoot(undefined);
+    expect(probeFullscreenLayout(fixture.tui)).toEqual({ status: "waiting" });
+    expect(probeFullscreenLayout({ mode: "fullscreen" } as TUI)).toEqual({
+      status: "incompatible", reason: "missing-viewport-capability",
+    });
+  });
+
+  test("rejects counts, ordering, allocation options, and synchronization drift", () => {
     const wrongCount = makeCanonical();
     wrongCount.tui.children.pop();
-    expect(resolvePi0840FullscreenLayout(wrongCount.tui)).toBeUndefined();
-
+    expect(probeFullscreenLayout(wrongCount.tui)).toEqual({
+      status: "incompatible", reason: "dock-contract-mismatch",
+    });
     const wrongOrder = makeCanonical();
     const dock = stack(wrongOrder.dock);
-    [dock.children[0], dock.children[1]] = [
-      dock.children[1]!,
-      dock.children[0]!,
-    ];
-    expect(resolvePi0840FullscreenLayout(wrongOrder.tui)).toBeUndefined();
-
+    [dock.children[0], dock.children[1]] = [dock.children[1]!, dock.children[0]!];
+    expect(probeFullscreenLayout(wrongOrder.tui)).toEqual({
+      status: "incompatible", reason: "unsynchronized-entries",
+    });
     const wrongOptions = makeCanonical();
     stack(wrongOptions.root).entries[0]!.grow = 2;
-    expect(resolvePi0840FullscreenLayout(wrongOptions.tui)).toBeUndefined();
-
+    expect(probeFullscreenLayout(wrongOptions.tui)).toEqual({
+      status: "incompatible", reason: "unexpected-root",
+    });
     const mismatched = makeCanonical();
     stack(mismatched.root).children[0] = new Lines([]);
-    expect(resolvePi0840FullscreenLayout(mismatched.tui)).toBeUndefined();
+    expect(probeFullscreenLayout(mismatched.tui)).toEqual({
+      status: "incompatible", reason: "unsynchronized-entries",
+    });
+  });
+
+  test("rejects missing, malformed, and sparse arrays without mutation or exceptions", () => {
+    for (const target of ["root", "dock"] as const) {
+      for (const field of ["children", "entries"] as const) {
+        for (const value of [undefined, null, {}, [null], Array(2)]) {
+          const fixture = makeCanonical();
+          Object.assign(fixture[target], { [field]: value });
+          expect(fixture.adapter.reconcile()).toEqual({
+            status: "incompatible", reason: "unsynchronized-entries",
+          });
+          expect((fixture[target] as unknown as Record<string, unknown>)[field]).toBe(value);
+        }
+      }
+    }
+    for (const target of ["tui", "transcript"] as const) {
+      const fixture = makeCanonical();
+      Object.assign(fixture[target], { children: undefined });
+      expect(probeFullscreenLayout(fixture.tui)).toEqual({
+        status: "incompatible", reason: "dock-contract-mismatch",
+      });
+    }
+  });
+
+  test("rejects additional dock rows without modifying the host", () => {
+    const fixture = makeCanonical();
+    fixture.dock.addChild(new Lines(["unknown row"]));
+    const before = [...stack(fixture.root).entries];
+    expect(fixture.adapter.reconcile()).toEqual({
+      status: "incompatible", reason: "dock-contract-mismatch",
+    });
+    expect(stack(fixture.root).entries).toEqual(before);
+    expect(fixture.dock.children).toHaveLength(7);
   });
 });
 
-describe("Pi0840SidebarLayoutAdapter", () => {
+describe("SidebarLayoutAdapter", () => {
+  test("waits for a root and installs once it is mounted", () => {
+    const fixture = makeCanonical();
+    fixture.tui.setLayoutRoot(undefined);
+    expect(fixture.adapter.reconcile()).toEqual({ status: "waiting" });
+    fixture.tui.setLayoutRoot(fixture.root);
+    expect(fixture.adapter.reconcile()).toEqual({ status: "installed" });
+  });
+
+  test("uses public stack methods and restores copied options and original components", () => {
+    const fixture = makeCanonical();
+    const before = stack(fixture.root).entries.map((entry) => ({ ...entry }));
+    const clear = spyOn(fixture.root, "clear");
+    const add = spyOn(fixture.root, "addChild");
+    try {
+      fixture.adapter.reconcile();
+      expect(clear).toHaveBeenCalledTimes(1);
+      expect(add).toHaveBeenCalledTimes(2);
+      expect(fixture.adapter.uninstall()).toBe(true);
+      expect(clear).toHaveBeenCalledTimes(2);
+      expect(add).toHaveBeenCalledTimes(4);
+      expect(stack(fixture.root).entries).toEqual(before);
+      expect(fixture.root.children[0]).toBe(fixture.transcript);
+      expect(fixture.root.children[1]).toBe(fixture.dock);
+      expect(fixture.adapter.reconcile()).toEqual({ status: "installed" });
+    } finally {
+      clear.mockRestore();
+      add.mockRestore();
+    }
+  });
+
+  test("detects active-root replacement without changing either root", () => {
+    const fixture = makeCanonical();
+    fixture.adapter.reconcile();
+    const installed = [...fixture.root.children];
+    const replacement = makeCanonical().root;
+    const replacementEntries = [...stack(replacement).entries];
+    fixture.tui.setLayoutRoot(replacement);
+    expect(fixture.adapter.reconcile()).toEqual({
+      status: "incompatible", reason: "ownership-lost",
+    });
+    expect(fixture.adapter.uninstall()).toBe(false);
+    expect(fixture.root.children).toEqual(installed);
+    expect(stack(replacement).entries).toEqual(replacementEntries);
+  });
+
+  test("does not overwrite another owner's changed allocation options", () => {
+    const fixture = makeCanonical();
+    fixture.adapter.reconcile();
+    stack(fixture.root).entries[0]!.grow = 2;
+    expect(fixture.adapter.reconcile()).toEqual({
+      status: "incompatible", reason: "ownership-lost",
+    });
+    expect(fixture.adapter.uninstall()).toBe(false);
+    expect(stack(fixture.root).entries[0]!.grow).toBe(2);
+  });
+
+  test("revalidates the canonical dock before reinstalling", () => {
+    const fixture = makeCanonical();
+    fixture.adapter.reconcile();
+    fixture.adapter.uninstall();
+    fixture.dock.addChild(new Lines(["new dock row"]));
+    expect(fixture.adapter.reconcile()).toEqual({
+      status: "incompatible", reason: "dock-contract-mismatch",
+    });
+    expect(fixture.root.children).toEqual([fixture.transcript, fixture.dock]);
+  });
+
   test("installs only owned root siblings and preserves all original dock entries", () => {
     const fixture = makeCanonical();
     const originalDockChildren = [...stack(fixture.dock).children];
     const originalDockEntries = [...stack(fixture.dock).entries];
 
-    expect(fixture.adapter.reconcile()).toBe("installed");
+    expect(fixture.adapter.reconcile()).toEqual({ status: "installed" });
     const root = stack(fixture.root);
     expect(root.children[0]).toBeInstanceOf(HStack);
     expect(root.children[1]).toBeInstanceOf(VStack);
@@ -239,13 +359,9 @@ describe("Pi0840SidebarLayoutAdapter", () => {
         render: () => Array.from({ length: height }, () => "sidebar"),
         invalidate() {},
       };
-      const adapter = new Pi0840SidebarLayoutAdapter(
-        fixture.tui,
-        sidebar,
-        SUPPORTED_PI_VERSION,
-      );
+      const adapter = new SidebarLayoutAdapter(fixture.tui, sidebar);
       height = adapter.getTranscriptHeight();
-      expect(adapter.reconcile()).toBe("installed");
+      expect(adapter.reconcile()).toEqual({ status: "installed" });
       adapter.setSidebarVisible(true);
       height = adapter.getTranscriptHeight();
       renderNative(fixture.tui);
@@ -280,7 +396,7 @@ describe("Pi0840SidebarLayoutAdapter", () => {
     const fixture = makeCanonical();
     fixture.adapter.reconcile();
     const installed = [...stack(fixture.root).children];
-    expect(fixture.adapter.reconcile()).toBe("installed");
+    expect(fixture.adapter.reconcile()).toEqual({ status: "installed" });
     expect(stack(fixture.root).children).toEqual(installed);
     expect(fixture.adapter.uninstall()).toBe(true);
     expect(stack(fixture.root).children).toEqual([
@@ -306,24 +422,20 @@ describe("Pi0840SidebarLayoutAdapter", () => {
       has: (_target, key) => Reflect.has(current, key),
       getPrototypeOf: () => Reflect.getPrototypeOf(current),
     });
-    const adapter = new Pi0840SidebarLayoutAdapter(
-      tuiReference,
-      first.sidebar,
-      SUPPORTED_PI_VERSION,
-    );
-    expect(adapter.reconcile()).toBe("installed");
+    const adapter = new SidebarLayoutAdapter(tuiReference, first.sidebar);
+    expect(adapter.reconcile()).toEqual({ status: "installed" });
     const installedTranscriptColumn = stack(first.root).children[0];
 
     first.tui.setLayoutRoot(undefined);
     current = new TuiMainScreen(first.terminal);
-    expect(adapter.reconcile()).toBe("waiting");
+    expect(adapter.reconcile()).toEqual({ status: "waiting" });
     expect(stack(first.root).children[0]).toBe(installedTranscriptColumn);
 
     const second = new TuiAltScreen(first.terminal);
     for (const component of first.components) second.addChild(component);
     second.setLayoutRoot(first.root);
     current = second;
-    expect(adapter.reconcile()).toBe("installed");
+    expect(adapter.reconcile()).toEqual({ status: "installed" });
 
     current = new TuiMainScreen(first.terminal);
     expect(adapter.uninstall()).toBe(true);
@@ -353,7 +465,9 @@ describe("Pi0840SidebarLayoutAdapter", () => {
     const fixture = makeCanonical();
     const customRoot = new VStack([new Lines(["custom"])]);
     fixture.tui.setLayoutRoot(customRoot);
-    expect(fixture.adapter.reconcile()).toBe("incompatible");
+    expect(fixture.adapter.reconcile()).toEqual({
+      status: "incompatible", reason: "unexpected-root",
+    });
     expect(runtime(fixture.tui).layoutRoot).toBe(customRoot);
     expect(
       (fixture.tui as unknown as Record<PropertyKey, unknown>)[VIEWPORT_TUI],

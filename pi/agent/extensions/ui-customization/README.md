@@ -1,6 +1,6 @@
 # UI customization
 
-> **Compatibility:** the fullscreen adapter supports the shared `@earendil-works/pi-coding-agent` **0.84.0–0.84.4** fullscreen layout shape; 0.84.0 is the minimum supported host version.
+> **Compatibility:** the fullscreen adapter checks the host's transcript/dock layout contract at runtime, not its package version. An unfamiliar layout disables the sidebar and restores Pi's default footer.
 
 This extension provides a 50-column session inspector that is visible by default. Press `Ctrl+B` or run `/sidebar` to hide or show it.
 
@@ -36,8 +36,12 @@ Context usage is muted at 50% or below (and when unknown), accented above 50% th
 
 ## Compatibility and lifecycle
 
-Pi does not expose a public API for replacing only the fullscreen transcript region or observing renderer changes. The local adapter therefore validates the shared Pi 0.84.0–0.84.4 fullscreen `VStack`, transcript `ScrollView`, six-row dock, synchronized stack arrays, renderer mode, and package version before changing the tree. On a mismatch it leaves Pi's layout untouched and warns once.
+Pi does not expose a public API for replacing only the fullscreen transcript region or observing renderer changes. `probeFullscreenLayout()` therefore validates the fullscreen `VStack`, primary transcript `ScrollView`, six-entry dock, component identities, synchronized stack arrays, and allocation options before changing the tree. Regular mode and a root that has not mounted yet are waiting states. A contract mismatch leaves Pi's layout untouched, warns once with a reason, and restores the default footer.
 
-The adapter mutates only the canonical root's transcript and dock component slots. It updates both private stack arrays, restores only slots it still owns, and can restore the canonical root while regular mode is active. The canonical mutation survives regular/fullscreen renderer remounts; the empty footer also retries installation when a fullscreen renderer first appears.
+Private stack reads stay inside the adapter's validated inspection code. New package versions are admitted when they retain this contract. Additional dock entries, changed allocation rules, and malformed arrays are rejected rather than guessed at.
+
+Automated checks have passed against Pi 0.84.4 and 0.85.1. These are test results, not a runtime allowlist. Run `bun test extensions/ui-customization/` from `pi/agent/`. The layout suite also uses the installed host's actual `createChatViewport()` factory when present; that test is skipped on 0.84.4, which predates the extracted factory. Private-layout behavioral changes still require smoke testing on a new host.
+
+`SidebarLayoutAdapter` retains the canonical root object and changes its contents through the public `VStack.clear()` and `addChild()` methods. It snapshots the original component references and allocation options before installation. Restoration requires the complete installed root-entry contract to remain intact; the adapter does not overwrite another owner's component or option changes. It checks the active root before reporting an installation as active and can restore the saved canonical root while regular mode is active. The canonical mutation survives regular/fullscreen renderer remounts; the empty footer also retries installation when a fullscreen renderer first appears.
 
 Pi continues to own transcript scrolling, wheel and page input, selection, scrollbar behavior, focus, alternate-screen entry/exit, and renderer switching. The inspector content has its own non-primary `ScrollView` selection region, so mouse-selected sidebar values exclude both the transcript and the one-column separator while wheel input continues chaining to the transcript. The extension creates no overlay, mouse interception, editor replacement, terminal-input listener, or `tui.render()` patch. Git refreshes remain generation-guarded so stale asynchronous results cannot update a replacement session.

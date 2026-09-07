@@ -9,7 +9,7 @@ import {
   type DynamicWorkflowStateRequestEvent,
 } from "../../lib/dynamic-workflow-events.ts";
 import { resolveGitMetadata, type GitMetadata } from "./git-metadata.ts";
-import { Pi0840SidebarLayoutAdapter } from "./layout.ts";
+import { SidebarLayoutAdapter, type InstallResult } from "./layout.ts";
 import { buildSidebarMetadata } from "./metadata.ts";
 import { SidebarComponent } from "./sidebar.ts";
 import type { PendingGitRefresh } from "./types.ts";
@@ -17,7 +17,7 @@ import { DynamicWorkflowSidebarState } from "./workflow-state.ts";
 
 export default function uiCustomization(pi: ExtensionAPI) {
   let currentContext: ExtensionContext | undefined;
-  let layoutAdapter: Pi0840SidebarLayoutAdapter | undefined;
+  let layoutAdapter: SidebarLayoutAdapter | undefined;
   let sidebar: SidebarComponent | undefined;
   let sidebarRequested = true;
   let compatibilityWarned = false;
@@ -49,14 +49,14 @@ export default function uiCustomization(pi: ExtensionAPI) {
   };
 
   const reportLayoutResult = (
-    result: "installed" | "waiting" | "incompatible" | undefined,
+    result: InstallResult | undefined,
     ctx: ExtensionContext,
   ) => {
-    if (result !== "incompatible") return;
+    if (result?.status !== "incompatible") return;
     if (!compatibilityWarned) {
       compatibilityWarned = true;
       ctx.ui.notify(
-        "ui-customization could not safely install the Pi 0.84.x fullscreen layout; using Pi's default layout.",
+        `Sidebar disabled: ${result.reason}. Using Pi's default layout.`,
         "warning",
       );
     }
@@ -144,14 +144,14 @@ export default function uiCustomization(pi: ExtensionAPI) {
       let active = true;
       let reconcileScheduled = false;
       let restoreScheduled = false;
-      let nextAdapter: Pi0840SidebarLayoutAdapter | undefined;
+      let nextAdapter: SidebarLayoutAdapter | undefined;
       const nextSidebar = new SidebarComponent(
         buildMetadata,
         currentTheme,
         () =>
           nextAdapter?.getTranscriptHeight() ?? Math.max(1, tui.terminal.rows),
       );
-      nextAdapter = new Pi0840SidebarLayoutAdapter(tui, nextSidebar);
+      nextAdapter = new SidebarLayoutAdapter(tui, nextSidebar);
       layoutAdapter = nextAdapter;
       sidebar = nextSidebar;
 
