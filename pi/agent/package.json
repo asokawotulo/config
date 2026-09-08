@@ -12,9 +12,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.84.4",
-    "@earendil-works/pi-coding-agent": "0.84.4",
-    "@earendil-works/pi-tui": "0.84.4",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
     "acorn": "8.18.0",
     "cc-safety-net": "2.0.8",
     "diff": "8.0.4",
