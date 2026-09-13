@@ -10,10 +10,6 @@ import {
   type Component,
   type TUI,
 } from "@earendil-works/pi-tui";
-import {
-  DYNAMIC_WORKFLOW_RUN_EVENT,
-  DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
-} from "../../lib/dynamic-workflow-events.ts";
 import uiCustomization from "./index.ts";
 
 const VIEWPORT_TUI = Symbol.for("@earendil-works/pi-tui/viewport");
@@ -171,6 +167,8 @@ function makeGitRefreshHarness() {
       sessionManager: {
         getSessionId: () => sessionId,
         getEntries: () => [],
+        getBranch: () => [],
+        getLeafId: () => null,
       },
       getContextUsage: () => ({
         tokens: 0,
@@ -266,6 +264,8 @@ describe("ui customization docked lifecycle", () => {
       sessionManager: {
         getSessionId: () => "session",
         getEntries: () => [],
+        getBranch: () => [],
+        getLeafId: () => null,
       },
       getContextUsage: () => ({
         tokens: 10_000,
@@ -274,12 +274,12 @@ describe("ui customization docked lifecycle", () => {
       }),
     } as unknown as ExtensionContext;
 
-    handlers.get("session_start")![0]!({ type: "session_start" }, context);
+    for (const handler of handlers.get("session_start") ?? [])
+      handler({ type: "session_start" }, context);
     await Promise.resolve();
-    expect(emitted).toContainEqual({
-      event: DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
-      data: { sessionId: "session" },
-    });
+    expect(
+      emitted.some(({ event }) => event.startsWith("dynamic-workflows:")),
+    ).toBe(false);
     expect(footer?.render(120)).toEqual([]);
     expect(notices).toEqual([]);
 
@@ -293,23 +293,18 @@ describe("ui customization docked lifecycle", () => {
     expect(sidebarEntry.visible?.({ width: 120, height: 30 })).toBe(false);
     expect(sidebarEntry.visible?.({ width: 99, height: 30 })).toBe(false);
 
-    const rendersBeforeWorkflow = fixture.renders();
-    for (const handler of busHandlers.get(DYNAMIC_WORKFLOW_RUN_EVENT) ?? []) {
-      handler({
-        sessionId: "session",
-        phase: "progress",
-        run: {
-          runId: "run",
-          sessionId: "session",
-          name: "Live review",
-          status: "running",
-          startedAt: 1,
-          agentCount: 1,
-          agents: [{ id: "reviewer", role: "reviewer", status: "running" }],
+    const rendersBeforeFabric = fixture.renders();
+    for (const handler of handlers.get("tool_execution_start") ?? [])
+      handler(
+        {
+          toolName: "fabric_exec",
+          toolCallId: "run",
+          args: { display: { name: "Live review" } },
         },
-      });
-    }
-    expect(fixture.renders()).toBeGreaterThan(rendersBeforeWorkflow);
+        context,
+      );
+    expect(fixture.renders()).toBeGreaterThan(rendersBeforeFabric);
+    expect(sidebarEntry.component.render(50).join("\n")).toContain("Fabric");
     expect(sidebarEntry.component.render(50).join("\n")).toContain(
       "Live review",
     );
@@ -317,10 +312,8 @@ describe("ui customization docked lifecycle", () => {
     commandHandler!("", context);
     expect(sidebarEntry.visible?.({ width: 120, height: 30 })).toBe(true);
 
-    handlers.get("session_shutdown")![0]!(
-      { type: "session_shutdown" },
-      context,
-    );
+    for (const handler of handlers.get("session_shutdown") ?? [])
+      handler({ type: "session_shutdown" }, context);
     expect(stack(fixture.root).children).toEqual([
       fixture.transcript,
       fixture.dock,
@@ -328,14 +321,20 @@ describe("ui customization docked lifecycle", () => {
   });
 
   test("keeps a waiting footer alive and installs after the root mounts", async () => {
-    const handlers = new Map<string, (event: unknown, ctx: ExtensionContext) => unknown>();
+    const handlers = new Map<
+      string,
+      (event: unknown, ctx: ExtensionContext) => unknown
+    >();
     const notices: string[] = [];
     const fixture = makeFullscreenTui();
     const mutableTui = fixture.tui as TUI & { layoutRoot?: Component };
     mutableTui.layoutRoot = undefined;
     let footer: Component | undefined;
     const pi = {
-      on(event: string, handler: (event: unknown, ctx: ExtensionContext) => unknown) {
+      on(
+        event: string,
+        handler: (event: unknown, ctx: ExtensionContext) => unknown,
+      ) {
         handlers.set(event, handler);
       },
       registerShortcut() {},
@@ -441,7 +440,12 @@ describe("ui customization docked lifecycle", () => {
           footer = factory?.(tui, identityTheme(), {});
         },
       },
-      sessionManager: { getSessionId: () => "session", getEntries: () => [] },
+      sessionManager: {
+        getSessionId: () => "session",
+        getEntries: () => [],
+        getBranch: () => [],
+        getLeafId: () => null,
+      },
     } as unknown as ExtensionContext;
 
     handlers.get("session_start")![0]!({}, context);
@@ -463,7 +467,8 @@ describe("ui customization docked lifecycle", () => {
     const middle = harness.makeContext("session", "/repo/middle");
     const latest = harness.makeContext("session", "/repo/latest");
 
-    harness.handlers.get("session_start")![0]!({}, first);
+    for (const handler of harness.handlers.get("session_start") ?? [])
+      handler({}, first);
     harness.handlers.get("input")![0]!({}, middle);
     harness.handlers.get("tool_execution_end")![0]!({}, latest);
     expect(harness.requests.map((request) => request.cwd)).toEqual([
@@ -488,9 +493,12 @@ describe("ui customization docked lifecycle", () => {
     const replaced = harness.makeContext("replaced", "/repo/replaced");
     const replacement = harness.makeContext("replacement", "/repo/replacement");
 
-    harness.handlers.get("session_start")![0]!({}, replaced);
-    harness.handlers.get("session_shutdown")![0]!({}, replaced);
-    harness.handlers.get("session_start")![0]!({}, replacement);
+    for (const handler of harness.handlers.get("session_start") ?? [])
+      handler({}, replaced);
+    for (const handler of harness.handlers.get("session_shutdown") ?? [])
+      handler({}, replaced);
+    for (const handler of harness.handlers.get("session_start") ?? [])
+      handler({}, replacement);
     expect(harness.requests.map((request) => request.cwd)).toEqual([
       "/repo/replaced",
     ]);

@@ -11,12 +11,10 @@ import {
   type Terminal,
 } from "@earendil-works/pi-tui";
 import {
-  MAX_DYNAMIC_WORKFLOW_AGENTS,
-  MAX_DYNAMIC_WORKFLOW_RUNS,
-  type DynamicWorkflowAgentSnapshot,
-  type DynamicWorkflowRunSnapshot,
-  type DynamicWorkflowStatus,
-} from "../../lib/dynamic-workflow-events.ts";
+  MAX_FABRIC_WORKERS,
+  type FabricSidebarSnapshot,
+  type FabricWorkerRow,
+} from "./fabric-state.ts";
 import { resolveGitMetadata } from "./git-metadata.ts";
 import {
   buildSidebarMetadata,
@@ -26,8 +24,9 @@ import {
   type SidebarMetadata,
 } from "./metadata.ts";
 import { calculateSessionCosts } from "./session-cost.ts";
-import { DynamicWorkflowSidebarState } from "./workflow-state.ts";
 import {
+  activityAppearance,
+  orderedFabricWorkers,
   contextUsageColor,
   SIDEBAR_WIDTH,
   SidebarComponent,
@@ -48,40 +47,40 @@ function usage(cost: number) {
   };
 }
 
-function workflowRun(
-  runId: string,
-  status: DynamicWorkflowStatus,
-  startedAt: number,
-  options: {
-    sessionId?: string;
-    finishedAt?: number;
-    agents?: DynamicWorkflowAgentSnapshot[];
-    name?: string;
-  } = {},
-): DynamicWorkflowRunSnapshot {
-  const agents = options.agents ?? [];
+function worker(id: string, status = "running"): FabricWorkerRow {
   return {
-    runId,
-    sessionId: options.sessionId ?? "session-a",
-    name: options.name ?? runId,
+    id,
+    name: id,
+    runner: "pi",
     status,
-    startedAt,
-    ...(options.finishedAt === undefined
-      ? {}
-      : { finishedAt: options.finishedAt }),
-    agentCount: agents.length,
-    agents,
+    updatedAt: 1,
+    currentTool: "grep",
+    turns: 2,
+    toolCalls: 4,
+    usage: {
+      input: 12345,
+      output: 678,
+      cacheRead: 9000,
+      cacheWrite: 10,
+      cost: 0.25,
+    },
   };
 }
 
-function widgetMetadata(
-  workflowRuns: readonly DynamicWorkflowRunSnapshot[] = [],
-): SidebarMetadata {
+function widgetMetadata(workers: FabricWorkerRow[] = []): SidebarMetadata {
+  const fabric: FabricSidebarSnapshot = {
+    workers,
+    executions: [],
+    connection: "live",
+    complete: true,
+    issues: [],
+    reportedCost: 0.2345,
+  };
   return {
     directory: "~/config",
     branchWorktree: "main",
     sessionName: "UI customization",
-    workflowRuns,
+    fabric,
     contextTokens: "0",
     contextWindow: "272K",
     contextPercent: 0,
@@ -150,52 +149,58 @@ describe("status widget metadata", () => {
     });
   });
 
-  test("partitions workflow cost without double-counting persisted usage", () => {
+  test("preserves historical workflow costs and deduplicates replay by run ID", () => {
     const settled = entry({
       type: "message",
       message: {
         role: "toolResult",
         toolName: "dynamic_workflow",
         usage: usage(5),
-        details: { runId: "settled", agents: [{ usage: usage(5) }] },
+        details: { runId: "settled", agents: [{ usage: usage(99) }] },
       },
     });
-    const runs = [
-      workflowRun("settled", "completed", 1, {
-        agents: [{ id: "done", role: "worker", status: "completed", cost: 5 }],
-      }),
-      workflowRun("active", "running", 2, {
-        agents: [{ id: "live", role: "worker", status: "running", cost: 2 }],
-      }),
-    ];
     const assistant = entry({
       type: "message",
       message: { role: "assistant", usage: usage(1) },
     });
-
-    expect(calculateSessionCosts([assistant, settled, settled], runs)).toEqual({
-      total: 8,
+    expect(calculateSessionCosts([assistant, settled, settled])).toEqual({
+      total: 6,
       main: 1,
-      subagents: 7,
+      subagents: 5,
     });
+    expect(
+      calculateSessionCosts([assistant, settled, settled], { reportedCost: 2 }),
+    ).toEqual({ total: 8, main: 1, subagents: 7 });
   });
 
-  test("replaces active snapshot cost when its result persists", () => {
-    const run = workflowRun("transition", "running", 1, {
-      agents: [{ id: "agent", role: "worker", status: "running", cost: 3 }],
+  test("supports legacy agent-detail fallback and invalid amounts without the deleted runtime", () => {
+    const legacy = (details: unknown) =>
+      entry({
+        type: "message",
+        message: { role: "toolResult", toolName: "dynamic_workflow", details },
+      });
+    const one = legacy({
+      runId: "one",
+      agents: [
+        { cost: 2 },
+        { usage: usage(3) },
+        { cost: -1 },
+        null,
+        { usage: { cost: { total: NaN } } },
+      ],
     });
-    expect(calculateSessionCosts([], [run]).subagents).toBe(3);
-
-    const result = entry({
-      type: "message",
-      message: {
-        role: "toolResult",
-        toolName: "dynamic_workflow",
-        usage: usage(3),
-        details: { runId: "transition", agents: [{ cost: 3 }] },
-      },
-    });
-    expect(calculateSessionCosts([result], [run]).subagents).toBe(3);
+    expect(calculateSessionCosts([one, one]).subagents).toBe(5);
+    expect(
+      calculateSessionCosts([legacy(null), legacy({ agents: "invalid" })])
+        .total,
+    ).toBe(0);
+    // Unidentified historical results remain independent; do not collapse them by tool name.
+    expect(
+      calculateSessionCosts([
+        legacy({ agents: [{ cost: 2 }] }),
+        legacy({ agents: [{ cost: 3 }] }),
+      ]).subagents,
+    ).toBe(5);
   });
 
   test("formats context tokens, percentages, and home-relative directories", () => {
@@ -261,7 +266,7 @@ describe("status widget metadata", () => {
         contextWindow: 100_000,
         percent: 63.125,
       }),
-      sessionManager: { getEntries: () => [] },
+      sessionManager: { getEntries: () => [], getBranch: () => [] },
     } as unknown as ExtensionContext;
 
     expect(
@@ -288,86 +293,6 @@ describe("status widget metadata", () => {
   });
 });
 
-describe("dynamic workflow widget state", () => {
-  test("filters by session and returns every run newest-first", () => {
-    const state = new DynamicWorkflowSidebarState();
-    state.beginSession("session-a");
-
-    expect(
-      state.applyRun({
-        sessionId: "session-b",
-        phase: "started",
-        run: workflowRun("foreign", "running", 9, { sessionId: "session-b" }),
-      }),
-    ).toBe(false);
-
-    for (const run of [
-      workflowRun("active-old", "running", 2),
-      workflowRun("settled", "completed", 8, { finishedAt: 9 }),
-      workflowRun("active-new", "running", 4),
-    ]) {
-      expect(
-        state.applyRun({ sessionId: "session-a", phase: "progress", run }),
-      ).toBe(true);
-    }
-    expect(state.getVisibleRuns().map((run) => run.runId)).toEqual([
-      "settled",
-      "active-new",
-      "active-old",
-    ]);
-
-    expect(
-      state.applyState({
-        sessionId: "session-a",
-        runs: [
-          workflowRun("older", "failed", 10, { finishedAt: 20 }),
-          workflowRun("newest", "completed", 15, { finishedAt: 25 }),
-          workflowRun("running", "running", 12),
-        ],
-      }),
-    ).toBe(true);
-    expect(state.getVisibleRuns().map((run) => run.runId)).toEqual([
-      "newest",
-      "running",
-      "older",
-    ]);
-  });
-
-  test("rejects malformed shared events without replacing valid state", () => {
-    const state = new DynamicWorkflowSidebarState();
-    state.beginSession("session-a");
-    const valid = workflowRun("valid", "running", 1);
-    expect(
-      state.applyRun({ sessionId: "session-a", phase: "started", run: valid }),
-    ).toBe(true);
-
-    expect(
-      state.applyRun({
-        sessionId: "session-a",
-        phase: "progress",
-        run: { ...workflowRun("unknown-field", "running", 2), extra: true },
-      }),
-    ).toBe(false);
-    expect(
-      state.applyState({
-        sessionId: "session-a",
-        runs: [
-          workflowRun("foreign", "completed", 3, {
-            sessionId: "session-b",
-          }),
-        ],
-      }),
-    ).toBe(false);
-    expect(
-      state.applyState({
-        sessionId: "session-a",
-        runs: [{ ...workflowRun("invalid-number", "failed", 4), startedAt: NaN }],
-      }),
-    ).toBe(false);
-    expect(state.getVisibleRuns()).toEqual([valid]);
-  });
-});
-
 describe("SidebarComponent", () => {
   test("renders a 50-column panel with sections in the required order", () => {
     const sidebar = new SidebarComponent(
@@ -379,13 +304,11 @@ describe("SidebarComponent", () => {
     const text = lines.join("\n");
 
     const sectionRow = (heading: string) =>
-      lines.findIndex(
-        (line) => line.replace(/^│\s*/, "").trim() === heading,
-      );
+      lines.findIndex((line) => line.replace(/^│\s*/, "").trim() === heading);
     expect(sectionRow("Directory")).toBeLessThan(sectionRow("Session"));
     expect(sectionRow("Session")).toBeLessThan(sectionRow("Context"));
     expect(sectionRow("Context")).toBeLessThan(sectionRow("Model"));
-    expect(sectionRow("Model")).toBeLessThan(sectionRow("Workflow"));
+    expect(sectionRow("Model")).toBeLessThan(sectionRow("Fabric"));
     expect(text).toContain("~/config");
     expect(text).toContain("0 / 272K  0.00%");
     expect(text).toContain("Cache hit 75.0%");
@@ -414,94 +337,141 @@ describe("SidebarComponent", () => {
     expect(withoutCacheRate).not.toContain("Cache hit");
   });
 
-  test("shows workflow agents when height permits and compacts on short terminals", () => {
-    const run = workflowRun("live", "running", 1, {
-      name: "Parallel review",
-      agents: [
-        {
-          id: "research",
-          role: "researcher",
-          status: "running",
-          activity: "Reading files",
-          cost: 0.25,
-        },
-        { id: "verify", role: "reviewer", status: "completed" },
-      ],
-    });
-    const settled = workflowRun("settled", "completed", 2, {
-      name: "Earlier implementation",
-    });
-    const tall = new SidebarComponent(
-      () => widgetMetadata([settled, run]),
+  test("worker metrics are hidden while main context/cache and worker costs remain", () => {
+    const text = new SidebarComponent(
+      () => widgetMetadata([worker("research")]),
       identityTheme,
-      () => 44,
+      () => 45,
     )
       .render(SIDEBAR_WIDTH)
       .join("\n");
-    expect(tall).toContain("Parallel review");
-    expect(tall).toContain("Earlier implementation");
-    expect(tall).toContain("running research");
-    expect(tall).toContain("completed verify");
-
-    const compact = new SidebarComponent(
-      () => widgetMetadata([run]),
-      identityTheme,
-      () => 11,
-    ).render(SIDEBAR_WIDTH);
-    const compactText = compact.join("\n");
-    for (const heading of [
-      "Directory",
-      "Session",
-      "Context",
-      "Model",
-      "Workflow",
-    ]) {
-      expect(compactText).toContain(heading);
-    }
-    expect(compact).toHaveLength(11);
-
-    const manyRuns = Array.from({ length: 8 }, (_, index) =>
-      workflowRun(`run-${index}`, "completed", 8 - index),
-    );
-    const constrained = new SidebarComponent(
-      () => widgetMetadata(manyRuns),
-      identityTheme,
-      () => 11,
-    )
-      .render(SIDEBAR_WIDTH)
-      .join("\n");
-    expect(constrained).toContain("run-0");
-    expect(constrained).toContain("more workflows");
+    for (const expected of [
+      "Fabric",
+      "research",
+      "Cost $0.250",
+      "4 calls",
+      "2 turns",
+      "grep",
+      "0 / 272K",
+      "Cache hit 75.0%",
+    ])
+      expect(text).toContain(expected);
+    for (const removed of ["↑12345", "↓678", "cache 9000/10", "Workflow"])
+      expect(text).not.toContain(removed);
   });
 
-  test("fits and renders the maximum workflow event contract linearly", () => {
-    const agents: DynamicWorkflowAgentSnapshot[] = Array.from(
-      { length: MAX_DYNAMIC_WORKFLOW_AGENTS },
-      (_, index) => ({
-        id: `agent-${index}`,
-        role: "worker",
-        status: "running",
-        activity: `activity-${index}`,
-        cost: index / 100,
-      }),
-    );
-    const runs = Array.from({ length: MAX_DYNAMIC_WORKFLOW_RUNS }, (_, index) =>
-      workflowRun(`run-${index}`, "running", index, { agents }),
-    );
-    const height = 80;
-    const lines = new SidebarComponent(
-      () => widgetMetadata(runs),
-      identityTheme,
-      () => height,
-    ).render(SIDEBAR_WIDTH);
-    const text = lines.join("\n");
+  test("long worker names cannot truncate their separate cost row", () => {
+    const long = { ...worker("long"), name: "long-worker-name-".repeat(8) };
+    for (const height of [11, 45]) {
+      const lines = new SidebarComponent(
+        () => widgetMetadata([long]),
+        identityTheme,
+        () => height,
+      ).render(SIDEBAR_WIDTH);
+      const nameIndex = lines.findIndex((line) =>
+        line.includes("long-worker-name"),
+      );
+      expect(nameIndex).toBeGreaterThanOrEqual(0);
+      expect(lines[nameIndex]).not.toContain("$0.250");
+      expect(lines[nameIndex + 1]).toContain("Cost $0.250");
+      expect(lines.every((line) => visibleWidth(line) <= SIDEBAR_WIDTH)).toBe(
+        true,
+      );
+    }
+  });
 
-    expect(lines).toHaveLength(height);
-    expect(lines.every((line) => visibleWidth(line) === SIDEBAR_WIDTH)).toBe(
+  test("compact truncation never leaves a worker name without its cost", () => {
+    const workers = Array.from({ length: 8 }, (_, i) => worker(`paired-${i}`));
+    for (const height of [8, 9, 10, 11, 12, 13, 14]) {
+      const lines = new SidebarComponent(
+        () => widgetMetadata(workers),
+        identityTheme,
+        () => height,
+      ).render(SIDEBAR_WIDTH);
+      expect(lines).toHaveLength(height);
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i]!.includes("paired-"))
+          expect(lines[i + 1]).toContain("Cost $0.250");
+      }
+      expect(lines.join("\n")).toContain("more in /fabric");
+    }
+  });
+
+  test("missing worker usage keeps its unknown cost below the name", () => {
+    const unknown = { ...worker("unknown-cost"), usage: undefined };
+    const lines = new SidebarComponent(
+      () => widgetMetadata([unknown]),
+      identityTheme,
+      () => 45,
+    ).render(SIDEBAR_WIDTH);
+    const index = lines.findIndex((line) => line.includes("unknown-cost"));
+    expect(index).toBeGreaterThanOrEqual(0);
+    expect(lines[index + 1]).toContain("Cost $?");
+  });
+
+  test("shared appearance handles all known states and neutral unknowns", () => {
+    for (const [status, symbol, color] of [
+      ["running", "●", "warning"],
+      ["completed", "✓", "success"],
+      ["queued", "○", "dim"],
+      ["failed", "✗", "error"],
+      ["timed_out", "✗", "error"],
+      ["stopped", "×", "muted"],
+      ["cancelled", "×", "muted"],
+      ["stale", "!", "warning"],
+      ["unexpected", "?", "dim"],
+    ] as const)
+      expect(activityAppearance(status)).toEqual({ symbol, color });
+  });
+
+  test("shared ordering handles parents, cycles, duplicate IDs across runners and depth limits", () => {
+    const parent = worker("parent");
+    const child = { ...worker("child"), parentId: "parent" };
+    expect(
+      orderedFabricWorkers([child, parent]).map((row) => [
+        row.worker.id,
+        row.depth,
+      ]),
+    ).toEqual([
+      ["parent", 0],
+      ["child", 1],
+    ]);
+    const cycle = [
+      { ...worker("a"), parentId: "b" },
+      { ...worker("b"), parentId: "a" },
+    ];
+    expect(orderedFabricWorkers(cycle)).toHaveLength(2);
+    expect(
+      orderedFabricWorkers([parent, { ...parent, runner: "claude" }]),
+    ).toHaveLength(2);
+    const deep = Array.from({ length: 12 }, (_, i) => ({
+      ...worker(String(i)),
+      ...(i ? { parentId: String(i - 1) } : {}),
+    }));
+    expect(orderedFabricWorkers(deep).every((row) => row.depth <= 4)).toBe(
       true,
     );
-    expect(text).toContain("run-0");
-    expect(text).toContain(`run-${MAX_DYNAMIC_WORKFLOW_RUNS - 1}`);
+  });
+
+  test("renders bounded Fabric rows and overflow at short and tall heights", () => {
+    const workers = Array.from({ length: MAX_FABRIC_WORKERS }, (_, i) =>
+      worker(`worker-${i}`),
+    );
+    for (const height of [11, 80]) {
+      const lines = new SidebarComponent(
+        () => widgetMetadata(workers),
+        identityTheme,
+        () => height,
+      ).render(SIDEBAR_WIDTH);
+      expect(lines).toHaveLength(height);
+      expect(lines.every((line) => visibleWidth(line) === SIDEBAR_WIDTH)).toBe(
+        true,
+      );
+      expect(lines.join("\n")).toContain("Fabric");
+      expect(lines.join("\n")).toContain("worker-0");
+      expect(lines.join("\n")).toContain("more");
+      expect(lines.join("\n")).not.toContain("worker-8 ");
+    }
   });
 
   test("caches by width and transcript height until invalidated", () => {

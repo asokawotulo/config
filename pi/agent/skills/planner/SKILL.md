@@ -40,7 +40,7 @@ Write each task as an execution checklist:
 6. Name concrete tests or scenarios and state what each proves.
 7. End with one checkable **Done when** condition.
 
-Express necessary sequencing through task order. Workflow selection, agent ownership, execution waves, and parallelization belong to the user-directed `dynamic-workflows` phase after the plan is approved.
+Express necessary sequencing through task order. After the plan is approved, the user may explicitly invoke `/skill:fabric-workflow` for execution. Keep planning read-only; do not load advanced Fabric skills or launch workers while preparing the handoff.
 
 ## Context Snippets
 

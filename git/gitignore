@@ -28,3 +28,6 @@ Temporary Items
 
 # Firecrawl
 .firecrawl/
+
+# Pi Fabric runtime state
+/.pi/fabric/

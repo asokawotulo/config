@@ -2,18 +2,12 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import {
-  DYNAMIC_WORKFLOW_RUN_EVENT,
-  DYNAMIC_WORKFLOW_STATE_EVENT,
-  DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT,
-  type DynamicWorkflowStateRequestEvent,
-} from "../../lib/dynamic-workflow-events.ts";
 import { resolveGitMetadata, type GitMetadata } from "./git-metadata.ts";
 import { SidebarLayoutAdapter, type InstallResult } from "./layout.ts";
 import { buildSidebarMetadata } from "./metadata.ts";
 import { SidebarComponent } from "./sidebar.ts";
 import type { PendingGitRefresh } from "./types.ts";
-import { DynamicWorkflowSidebarState } from "./workflow-state.ts";
+import { registerFabricSidebar } from "./fabric-bridge.ts";
 
 export default function uiCustomization(pi: ExtensionAPI) {
   let currentContext: ExtensionContext | undefined;
@@ -26,19 +20,12 @@ export default function uiCustomization(pi: ExtensionAPI) {
   let gitRefreshGeneration = 0;
   let gitRefreshRunning = false;
   let pendingGitRefresh: PendingGitRefresh | undefined;
-  const workflows = new DynamicWorkflowSidebarState();
 
   const buildMetadata = () => {
     if (!currentContext) {
       throw new Error("ui-customization rendered after session shutdown");
     }
-    return buildSidebarMetadata(
-      pi,
-      currentContext,
-      git,
-      workflows.getVisibleRuns(),
-      workflows.getRuns(),
-    );
+    return buildSidebarMetadata(pi, currentContext, git, fabric.snapshot());
   };
 
   const currentTheme = () => {
@@ -69,6 +56,8 @@ export default function uiCustomization(pi: ExtensionAPI) {
     if (currentContext) reportLayoutResult(result, currentContext);
   };
 
+  const fabric = registerFabricSidebar(pi, refreshSidebar);
+
   const toggleSidebar = (ctx: ExtensionContext) => {
     currentContext = ctx;
     if (ctx.mode !== "tui") {
@@ -94,14 +83,6 @@ export default function uiCustomization(pi: ExtensionAPI) {
     handler: async (_args, ctx) => toggleSidebar(ctx),
   });
 
-  // Register bus listeners during extension setup so startup hydration cannot race them.
-  pi.events.on(DYNAMIC_WORKFLOW_RUN_EVENT, (data) => {
-    if (workflows.applyRun(data)) refreshSidebar();
-  });
-  pi.events.on(DYNAMIC_WORKFLOW_STATE_EVENT, (data) => {
-    if (workflows.applyState(data)) refreshSidebar();
-  });
-
   const refreshGit = async (ctx: ExtensionContext) => {
     currentContext = ctx;
     pendingGitRefresh = {
@@ -116,10 +97,7 @@ export default function uiCustomization(pi: ExtensionAPI) {
         const request = pendingGitRefresh;
         pendingGitRefresh = undefined;
         const nextGit = await resolveGitMetadata(pi, request.cwd);
-        if (
-          request.generation !== gitRefreshGeneration ||
-          pendingGitRefresh
-        ) {
+        if (request.generation !== gitRefreshGeneration || pendingGitRefresh) {
           continue;
         }
         git = nextGit;
@@ -217,10 +195,6 @@ export default function uiCustomization(pi: ExtensionAPI) {
     currentContext = ctx;
     git = { branchWorktree: "" };
     sidebarRequested = true;
-    const sessionId = ctx.sessionManager.getSessionId();
-    workflows.beginSession(sessionId);
-    const request: DynamicWorkflowStateRequestEvent = { sessionId };
-    pi.events.emit(DYNAMIC_WORKFLOW_STATE_REQUEST_EVENT, request);
     if (ctx.mode === "tui") {
       installFooterAndLayout(ctx);
       void refreshGit(ctx);
@@ -243,7 +217,6 @@ export default function uiCustomization(pi: ExtensionAPI) {
     updateContext(ctx, { refreshRepository: true });
   });
   pi.on("session_shutdown", () => {
-    workflows.endSession();
     resetSessionState();
   });
 }

@@ -1,0 +1,60 @@
+{
+  "configVersion": 4,
+  "fullCodeMode": true,
+  "executor": {
+    "kernel": "typescript",
+    "runtime": "quickjs"
+  },
+  "approvals": {
+    "read": "allow",
+    "write": "allow",
+    "execute": "allow",
+    "network": "allow",
+    "agent": "allow"
+  },
+  "capture": {
+    "keepVisible": [
+      "fabric_exec",
+      "ask_user",
+      "firecrawl_search",
+      "firecrawl_scrape",
+      "firecrawl_crawl"
+    ],
+    "risks": {
+      "ask_user": "read",
+      "firecrawl_search": "network",
+      "firecrawl_scrape": "network",
+      "firecrawl_crawl": "network"
+    }
+  },
+  "agents": {
+    "runner": "pi",
+    "transport": "process",
+    "model": "openai-codex/gpt-6-astra",
+    "thinking": "medium",
+    "extensions": true,
+    "defaultTools": [
+      "read",
+      "grep",
+      "find",
+      "ls"
+    ],
+    "maxConcurrent": 4
+  },
+  "components": [
+    {
+      "id": "asoka-sidebar",
+      "component": "asoka.fabric-sidebar"
+    }
+  ],
+  "ui": {
+    "enabled": true,
+    "widget": "hidden"
+  },
+  "compaction": {
+    "engine": "pi"
+  },
+  "retention": {
+    "oneShotRunMs": 604800000
+  }
+}

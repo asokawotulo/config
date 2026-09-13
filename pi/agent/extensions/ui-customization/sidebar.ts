@@ -6,12 +6,7 @@ import {
   visibleWidth,
   type Component,
 } from "@earendil-works/pi-tui";
-import {
-  dynamicWorkflowDisplayText,
-  type DynamicWorkflowAgentStatus,
-  type DynamicWorkflowRunSnapshot,
-  type DynamicWorkflowStatus,
-} from "../../lib/dynamic-workflow-events.ts";
+import type { FabricWorkerRow } from "./fabric-state.ts";
 import type { SidebarMetadata } from "./metadata.ts";
 
 export const SIDEBAR_WIDTH = 40;
@@ -33,6 +28,8 @@ interface SidebarRow {
   color?: SidebarColor;
   heading?: boolean;
   optionalPriority?: OptionalPriority;
+  /** Keep a worker name with its following cost row in compact layouts. */
+  keepWithNext?: boolean;
 }
 
 export function contextUsageColor(
@@ -64,7 +61,7 @@ function cacheHitRateRows(rate: number | null): SidebarRow[] {
   ];
 }
 
-function agentAppearance(status: DynamicWorkflowAgentStatus): {
+export function activityAppearance(status: string): {
   symbol: string;
   color: SidebarColor;
 } {
@@ -73,80 +70,151 @@ function agentAppearance(status: DynamicWorkflowAgentStatus): {
       return { symbol: "●", color: "warning" };
     case "completed":
       return { symbol: "✓", color: "success" };
-    case "failed":
-      return { symbol: "✗", color: "error" };
-    case "skipped":
-      return { symbol: "–", color: "muted" };
-    case "cancelled":
-      return { symbol: "×", color: "muted" };
     case "queued":
       return { symbol: "○", color: "dim" };
-  }
-}
-
-function workflowAppearance(status: DynamicWorkflowStatus): {
-  symbol: string;
-  color: SidebarColor;
-} {
-  switch (status) {
-    case "running":
-      return { symbol: "●", color: "warning" };
-    case "completed":
-      return { symbol: "✓", color: "success" };
     case "failed":
+    case "timed_out":
       return { symbol: "✗", color: "error" };
+    case "stopped":
     case "cancelled":
       return { symbol: "×", color: "muted" };
-    case "interrupted":
+    case "stale":
       return { symbol: "!", color: "warning" };
+    default:
+      return { symbol: "?", color: "dim" };
   }
 }
 
-function workflowRows(
-  runs: readonly DynamicWorkflowRunSnapshot[],
+/** Shared ordering for compact and expanded views, including orphan/cyclic data. */
+export function orderedFabricWorkers(workers: readonly FabricWorkerRow[]) {
+  const key = (worker: FabricWorkerRow) =>
+    JSON.stringify([worker.runner, worker.id]);
+  const byId = new Map(workers.map((worker) => [key(worker), worker]));
+  const children = new Map<string, FabricWorkerRow[]>();
+  for (const worker of workers) {
+    if (!worker.parentId) continue;
+    const parent = JSON.stringify([worker.runner, worker.parentId]);
+    children.set(parent, [...(children.get(parent) ?? []), worker]);
+  }
+  const ordered: Array<{ worker: FabricWorkerRow; depth: number }> = [];
+  const visited = new Set<string>();
+  const visit = (worker: FabricWorkerRow, depth: number) => {
+    const id = key(worker);
+    if (visited.has(id)) return;
+    visited.add(id);
+    ordered.push({ worker, depth: Math.min(depth, 4) });
+    for (const child of children.get(id) ?? []) visit(child, depth + 1);
+  };
+  for (const worker of workers) {
+    if (
+      !worker.parentId ||
+      !byId.has(JSON.stringify([worker.runner, worker.parentId]))
+    )
+      visit(worker, 0);
+  }
+  for (const worker of workers) visit(worker, 0);
+  return ordered;
+}
+
+function fabricWorkerRows(
+  worker: FabricWorkerRow,
+  depth: number,
+  compact: boolean,
 ): SidebarRow[] {
-  if (runs.length === 0) return [{ text: "No workflow runs", color: "dim" }];
-
-  const rows: SidebarRow[] = [];
-  for (const run of runs) {
-    const appearance = workflowAppearance(run.status);
+  const status =
+    worker.stale && ["running", "queued"].includes(worker.status)
+      ? "stale"
+      : worker.status;
+  const { symbol, color } = activityAppearance(status);
+  const prefix = "  ".repeat(depth);
+  const rows: SidebarRow[] = [
+    {
+      text: `${prefix}${symbol} ${worker.name}`,
+      color,
+      keepWithNext: true,
+    },
+    {
+      text: `${prefix}  Cost ${worker.usage ? formatCost(worker.usage.cost) : "$?"}`,
+    },
+  ];
+  if (compact) return rows;
+  const elapsed =
+    worker.startedAt === undefined
+      ? ""
+      : ` · ${Math.max(0, Math.floor(((worker.finishedAt ?? Date.now()) - worker.startedAt) / 1000))}s`;
+  rows.push({
+    text: `${prefix}  ${status}${elapsed}${worker.currentTool ? ` · ${worker.currentTool}` : ""}`,
+    optionalPriority: 30,
+  });
+  if (worker.model)
     rows.push({
-      text: `${appearance.symbol} ${run.status} ${dynamicWorkflowDisplayText(run.name)}`,
-      color: appearance.color,
+      text: `${prefix}  ${worker.model}${worker.thinking ? ` · ${worker.thinking}` : ""}`,
+      optionalPriority: 10,
     });
-
-    run.agents.forEach((agent) => {
-      const agentStyle = agentAppearance(agent.status);
-      rows.push({
-        text: `  ${agentStyle.symbol} ${agent.status} ${dynamicWorkflowDisplayText(agent.id)}`,
-        color: agentStyle.color,
-        optionalPriority: 30,
-      });
-      if (typeof agent.cost === "number" && Number.isFinite(agent.cost)) {
-        rows.push({
-          text: `    ${formatCost(agent.cost)}`,
-          color: "dim",
-          optionalPriority: 20,
-        });
-      }
-      if (agent.status === "running" && agent.activity) {
-        rows.push({
-          text: `    ↳ ${dynamicWorkflowDisplayText(agent.activity)}`,
-          color: "dim",
-          optionalPriority: 10,
-        });
-      }
+  // TODO: Display worker context usage and latest-prompt cache hit rate when
+  // Fabric exposes reliable metrics. Cumulative run usage is not occupancy.
+  rows.push({
+    text: `${prefix}  ${worker.toolCalls ?? 0} calls · ${worker.turns ?? 0} turns`,
+    optionalPriority: 10,
+  });
+  if (worker.actorId)
+    rows.push({
+      text: `${prefix}  Actor ${worker.actorName ?? worker.actorId}`,
+      optionalPriority: 20,
     });
+  return rows;
+}
 
-    const hidden = Math.max(0, run.agentCount - run.agents.length);
-    if (hidden > 0) {
+function fabricRows(metadata: SidebarMetadata, compact = false): SidebarRow[] {
+  const fabric = metadata.fabric;
+  if (!fabric) return [{ text: "Fabric data unavailable", color: "dim" }];
+  const rows: SidebarRow[] = [];
+  const execution =
+    fabric.executions.find((run) => run.status === "running") ??
+    fabric.executions[0];
+  if (!compact && execution) {
+    rows.push({ text: execution.name });
+    if (execution.phase)
       rows.push({
-        text: `  … ${hidden} more agents`,
-        color: "dim",
+        text: `${execution.status} · ${execution.phase}`,
+        color: activityAppearance(execution.status).color,
         optionalPriority: 25,
       });
-    }
   }
+  if (fabric.connection !== "live")
+    rows.push({
+      text:
+        fabric.connection === "connecting"
+          ? "Connecting to Fabric…"
+          : "Live data unavailable",
+      color: "dim",
+      optionalPriority: 10,
+    });
+  if (!compact && !fabric.complete)
+    rows.push({
+      text: "Cost coverage incomplete",
+      color: "warning",
+      optionalPriority: 25,
+    });
+  for (const { worker, depth } of orderedFabricWorkers(fabric.workers).slice(
+    0,
+    8,
+  )) {
+    rows.push(...fabricWorkerRows(worker, depth, compact));
+  }
+  if (fabric.workers.length > 8)
+    rows.push({
+      text: `… ${fabric.workers.length - 8} more workers`,
+      color: "dim",
+    });
+  if (fabric.workers.length === 0)
+    rows.push({ text: "No worker runs", color: "dim" });
+  if (!compact)
+    rows.push({
+      text: "/fabric for details and controls",
+      color: "dim",
+      optionalPriority: 10,
+    });
   return rows;
 }
 
@@ -169,19 +237,28 @@ function expandedRows(metadata: SidebarMetadata): SidebarRow[] {
       color: contextColor,
     },
     ...cacheHitRateRows(metadata.latestCacheHitRate),
-    { text: `Total ${formatCost(metadata.cost)}` },
-    { text: `Main ${formatCost(metadata.mainCost)}`, optionalPriority: 50 },
     {
-      text: `Subagents ${formatCost(metadata.subagentCost)}`,
-      optionalPriority: 50,
+      text: `${metadata.costComplete === false ? "Reported" : "Total"} ${formatCost(metadata.cost)}`,
     },
+    ...(metadata.mainCost !== null && metadata.subagentCost !== null
+      ? [
+          {
+            text: `Main ${formatCost(metadata.mainCost)}`,
+            optionalPriority: 50 as const,
+          },
+          {
+            text: `Subagents ${formatCost(metadata.subagentCost)}`,
+            optionalPriority: 50 as const,
+          },
+        ]
+      : []),
     spacer(),
     heading("Model"),
     { text: metadata.modelName },
     { text: metadata.thinkingLevel, optionalPriority: 55 },
     spacer(),
-    heading("Workflow"),
-    ...workflowRows(metadata.workflowRuns),
+    heading("Fabric"),
+    ...fabricRows(metadata),
   ];
 }
 
@@ -196,32 +273,22 @@ function compactRows(metadata: SidebarMetadata, budget: number): SidebarRow[] {
     },
     { text: `Model      ${metadata.modelName}`, heading: true },
   ];
-  const workflowBudget = Math.max(0, budget - rows.length);
-  if (workflowBudget === 0) return rows.slice(0, budget);
-  if (metadata.workflowRuns.length === 0) {
-    rows.push({ text: "Workflow   No workflow runs", heading: true });
-    return rows;
-  }
-
-  const needsOverflow = metadata.workflowRuns.length > workflowBudget;
-  const visibleCount = Math.max(0, workflowBudget - (needsOverflow ? 1 : 0));
-  metadata.workflowRuns.slice(0, visibleCount).forEach((run, index) => {
-    const appearance = workflowAppearance(run.status);
-    const prefix = index === 0 ? "Workflow   " : "           ";
+  const available = Math.max(0, budget - rows.length);
+  if (available > 0)
     rows.push({
-      text: `${prefix}${appearance.symbol} ${run.status} ${dynamicWorkflowDisplayText(run.name)}`,
-      color: appearance.color,
+      text: `Fabric · ${metadata.fabric?.workers.length ?? 0} workers · ${formatCost(metadata.subagentCost ?? 0)}`,
       heading: true,
     });
-  });
-  if (needsOverflow) {
-    rows.push({
-      text: `${visibleCount === 0 ? "Workflow   " : "           "}… ${metadata.workflowRuns.length - visibleCount} more workflows`,
-      color: "dim",
-      heading: true,
-    });
+  const candidates = fabricRows(metadata, true);
+  const capacity = Math.max(0, available - 1);
+  if (candidates.length <= capacity) {
+    rows.push(...candidates);
+  } else if (capacity > 0) {
+    const shown = candidates.slice(0, capacity - 1);
+    if (shown.at(-1)?.keepWithNext) shown.pop();
+    rows.push(...shown, { text: "… more in /fabric", color: "dim" });
   }
-  return rows;
+  return rows.slice(0, budget);
 }
 
 function fitRows(rows: readonly SidebarRow[], budget: number): SidebarRow[] {
