@@ -13,6 +13,7 @@ trust.json
 models.json
 models-store.json
 mcp-cache.json
+/fabric/
 extensions/summaries/config.private.json
 extensions/summaries/config.private.json.*.tmp
 

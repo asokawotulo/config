@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-09-13 20:38
+### Added
+- Fabric integration with TypeScript/QuickJS, explicit approval configuration, read-only worker defaults and seven-day worker retention.
+- Fabric sidebar bridge using public component calls and result events, deduplicated Main/Subagent costs, bounded metadata checkpoints and active-branch recovery.
+- Offline Fabric/FFF compatibility checks, cost regressions, and migration/rollback documentation.
+- Integration tests for observation lifecycle, stale polls, persistence, privacy and responsive Fabric rows.
+- Offline proof that tool-diffs executes under Fabric but does not replace its nested renderer or plain-text fallback. The extension remains disabled.
+### Changed
+- Unpinned Pi package specs and replaced exact-version test assertions with capability checks and installed-version diagnostics.
+- Shared Fabric worker ordering, compact/expanded row rendering and status presentation.
+- Hid Fabric's duplicate above-editor widget without disabling its dashboard or child conversations.
+- Updated planner handoff guidance to use Fabric workflows.
+- Kept pi-fff overrides and the MCP adapter pending server parity. Retained questionnaires, Firecrawl, session management, Supacode and Markdown diff rendering.
+### Removed
+- Legacy dynamic-workflows and Guardrails implementations, their event adapters, workflow skill and prompt, and unused acorn/cc-safety-net dependencies. Historical sessions, artifacts and cost parsing are preserved.
+- Fabric worker input/output and raw cache rows; main-session metrics and cumulative accounting data remain.
+### Fixed
+- Replaced stale 50-column layout test expectations with the existing sidebar width constant.
+
 ## 2026-09-07 23:06
 ### Changed
 - UI customization: replaced the Pi version allowlist with runtime layout checks, enabling the sidebar on Pi 0.85.1 without changing dependency pins

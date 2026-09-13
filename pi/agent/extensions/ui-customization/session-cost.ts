@@ -1,10 +1,10 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import type { DynamicWorkflowRunSnapshot } from "../../lib/dynamic-workflow-events.ts";
 
 export interface SessionCosts {
   total: number;
-  main: number;
-  subagents: number;
+  /** Null when Fabric combines worker and other tool usage. */
+  main: number | null;
+  subagents: number | null;
 }
 
 function finiteCost(value: unknown): number | undefined {
@@ -49,36 +49,49 @@ function workflowDetailsCost(agents: readonly unknown[] | undefined): number {
 }
 
 /**
- * Partition persisted parent/tool usage from transient workflow snapshots.
- * A persisted dynamic_workflow result supersedes its event snapshot, avoiding
- * the progress-to-tool-result race from charging the same agents twice.
+ * Read persisted parent/tool billing, including historical dynamic_workflow
+ * results. Legacy run IDs deduplicate replayed records without depending on
+ * the deleted workflow extension. Fabric workers are accounted separately.
  */
 export function calculateSessionCosts(
   entries: readonly SessionEntry[],
-  workflowRuns: readonly DynamicWorkflowRunSnapshot[] = [],
+  fabric?: { reportedCost: number },
 ): SessionCosts {
   let main = 0;
   let subagents = 0;
-  const persistedWorkflowIds = new Set<string>();
+  let fabricCost = 0;
+  let hasFabric = false;
   const chargedWorkflowIds = new Set<string>();
 
   for (const entry of entries) {
     if (entry.type === "message" && entry.message.role === "assistant") {
+      hasFabric ||=
+        Array.isArray(entry.message.content) &&
+        entry.message.content.some(
+          (block) => block.type === "toolCall" && block.name === "fabric_exec",
+        );
       main += usageCost(entry.message.usage) ?? 0;
       continue;
     }
     if (entry.type === "message" && entry.message.role === "toolResult") {
       const message = entry.message;
+      if (message.toolName === "fabric_exec") {
+        hasFabric = true;
+        // Direct tool billing, e.g. approval classifiers. Worker cost comes
+        // from the separate, deduplicated Fabric ledger.
+        fabricCost += usageCost(message.usage) ?? 0;
+        continue;
+      }
       if (message.toolName !== "dynamic_workflow") {
         main += usageCost(message.usage) ?? 0;
         continue;
       }
 
       const details = workflowDetails(message.details);
-      if (details.runId) persistedWorkflowIds.add(details.runId);
       if (details.runId && chargedWorkflowIds.has(details.runId)) continue;
       if (details.runId) chargedWorkflowIds.add(details.runId);
-      subagents += usageCost(message.usage) ?? workflowDetailsCost(details.agents);
+      subagents +=
+        usageCost(message.usage) ?? workflowDetailsCost(details.agents);
       continue;
     }
     if (entry.type === "compaction" || entry.type === "branch_summary") {
@@ -86,17 +99,13 @@ export function calculateSessionCosts(
     }
   }
 
-  const chargedActiveIds = new Set<string>();
-  for (const run of workflowRuns) {
-    if (
-      persistedWorkflowIds.has(run.runId) ||
-      chargedActiveIds.has(run.runId)
-    ) {
-      continue;
-    }
-    chargedActiveIds.add(run.runId);
-    for (const agent of run.agents) subagents += finiteCost(agent.cost) ?? 0;
-  }
-
-  return { total: main + subagents, main, subagents };
+  return {
+    total: main + subagents + fabricCost + (fabric?.reportedCost ?? 0),
+    main: fabric ? main + fabricCost : hasFabric ? null : main,
+    subagents: fabric
+      ? subagents + fabric.reportedCost
+      : hasFabric
+        ? null
+        : subagents,
+  };
 }

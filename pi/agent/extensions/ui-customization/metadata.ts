@@ -5,44 +5,37 @@ import type {
   ExtensionContext,
   SessionEntry,
 } from "@earendil-works/pi-coding-agent";
-import type { DynamicWorkflowRunSnapshot } from "../../lib/dynamic-workflow-events.ts";
 import { sanitizeTerminalText } from "../../lib/text.ts";
 import type { GitMetadata } from "./git-metadata.ts";
 import { calculateSessionCosts } from "./session-cost.ts";
+import type { FabricSidebarSnapshot } from "./fabric-state.ts";
 
-export {
-  resolveGitMetadata,
-  type GitMetadata,
-} from "./git-metadata.ts";
-export {
-  calculateSessionCosts,
-  type SessionCosts,
-} from "./session-cost.ts";
-export {
-  DynamicWorkflowSidebarState,
-  selectSidebarWorkflowRuns,
-} from "./workflow-state.ts";
+export { resolveGitMetadata, type GitMetadata } from "./git-metadata.ts";
+export { calculateSessionCosts, type SessionCosts } from "./session-cost.ts";
 export { sanitizeTerminalText } from "../../lib/text.ts";
 
 export interface SidebarMetadata {
   directory: string;
   branchWorktree: string;
   sessionName: string;
-  workflowRuns: readonly DynamicWorkflowRunSnapshot[];
+  fabric?: FabricSidebarSnapshot;
+  costComplete?: boolean;
   contextTokens: string;
   contextWindow: string;
   contextPercent: number | null;
   latestCacheHitRate: number | null;
-  /** Total session cost, including Dynamic Workflow subagents. */
+  /** Total reported session cost, including tool-reported usage. */
   cost: number;
-  mainCost: number;
-  subagentCost: number;
+  /** Null when Fabric usage cannot be partitioned reliably. */
+  mainCost: number | null;
+  subagentCost: number | null;
   modelName: string;
   thinkingLevel: string;
 }
 
 export function formatTokenCount(count: number | null | undefined): string {
-  if (count === null || count === undefined || !Number.isFinite(count)) return "?";
+  if (count === null || count === undefined || !Number.isFinite(count))
+    return "?";
   if (count < 1_000) return Math.max(0, Math.round(count)).toString();
   if (count < 1_000_000) return `${Math.round(count / 1_000)}K`;
   return `${(count / 1_000_000).toFixed(1)}M`;
@@ -110,21 +103,20 @@ export function buildSidebarMetadata(
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   git: GitMetadata,
-  workflowRuns: readonly DynamicWorkflowRunSnapshot[] = [],
-  costWorkflowRuns: readonly DynamicWorkflowRunSnapshot[] = workflowRuns,
+  fabric?: FabricSidebarSnapshot,
 ): SidebarMetadata {
   const usage = ctx.getContextUsage();
   const contextWindow = usage?.contextWindow ?? ctx.model?.contextWindow;
   const percent = usage?.percent;
-  const entries = ctx.sessionManager.getEntries();
-  const costs = calculateSessionCosts(entries, costWorkflowRuns);
+  const entries = ctx.sessionManager.getBranch();
+  const costs = calculateSessionCosts(entries, fabric);
   const latestCacheHitRate = calculateLatestCacheHitRate(entries);
 
   return {
     directory: formatDirectory(ctx.cwd),
     branchWorktree: git.branchWorktree || "not a git worktree",
     sessionName: sanitizeTerminalText(pi.getSessionName() ?? "unnamed"),
-    workflowRuns,
+    ...(fabric ? { fabric, costComplete: fabric.complete } : {}),
     contextTokens: formatTokenCount(usage?.tokens),
     contextWindow: formatTokenCount(contextWindow),
     contextPercent:
@@ -133,9 +125,13 @@ export function buildSidebarMetadata(
     cost: costs.total,
     mainCost: costs.main,
     subagentCost: costs.subagents,
-    modelName: sanitizeTerminalText(ctx.model?.name ?? ctx.model?.id ?? "no model"),
+    modelName: sanitizeTerminalText(
+      ctx.model?.name ?? ctx.model?.id ?? "no model",
+    ),
     thinkingLevel: sanitizeTerminalText(
-      ctx.model?.reasoning ? (ctx.thinkingLevel ?? pi.getThinkingLevel()) : "off",
+      ctx.model?.reasoning
+        ? (ctx.thinkingLevel ?? pi.getThinkingLevel())
+        : "off",
     ),
   };
 }

@@ -2,7 +2,7 @@
 
 > **Compatibility:** the fullscreen adapter checks the host's transcript/dock layout contract at runtime, not its package version. An unfamiliar layout disables the sidebar and restores Pi's default footer.
 
-This extension provides a 50-column session inspector that is visible by default. Press `Ctrl+B` or run `/sidebar` to hide or show it.
+This extension provides a 40-column session inspector that is visible by default. Press `Ctrl+B` or run `/sidebar` to hide or show it.
 
 In fullscreen mode the inspector is a fixed-width `HStack` sibling of Pi's native transcript `ScrollView`. Pi's cloned editor/status dock remains below both columns at full terminal width, so the sidebar fills exactly the transcript region and never overlaps the editor. At fewer than 100 terminal columns the sidebar hides automatically and the transcript regains the full width.
 
@@ -12,9 +12,9 @@ The panel displays these sections in order:
 2. Session name
 3. Context usage, latest prompt cache hit rate, and Total/Main/Subagent cost
 4. Model and thinking level
-5. Current workflows and agent status
+5. Fabric execution/phase and worker status, cost, current tool, timing, model/thinking, calls/turns and actor ownership
 
-Optional workflow activity, agent costs, extra agents, cost details, Git metadata, and thinking level are removed first when vertical space is limited. Workflow summaries are retained ahead of agent details; if the transcript region is still too short, the compact layout reports how many additional session workflows are hidden.
+Optional metadata rows disappear first when vertical space is limited. Worker cost is shown on its own line directly below the name, so long names cannot truncate the amount. Compact layouts keep each name/cost pair together. At most eight workers are displayed; the compact layout points to `/fabric` when more details are hidden.
 
 ## Keyboard binding
 
@@ -24,15 +24,21 @@ Pi normally binds `Ctrl+B` to editor cursor-left. `pi/agent/keybindings.json` na
 
 The fullscreen dock omits Pi's footer row. The extension also installs an empty custom footer through the public `ctx.ui.setFooter()` API, removing directory, session, context, cost, and model details below the editor in regular mode. Pi restores its built-in footer as part of extension UI reset.
 
-## Dynamic workflows
+## Fabric activity
 
-The panel hydrates every workflow from the current Pi session through the shared Dynamic Workflow event contract, orders runs newest-first, and updates as they progress. It is read-only; use `/workflows` to inspect runs, open attachable zmx agents, or interrupt and terminate agents.
+The `asoka.fabric-sidebar` component in `fabric.json` reads `agents.self` and local/lineage `agents.list` once per second in the root TUI. It uses Fabric's public protocol, not private dashboard state, and never triggers a model turn. Reads are non-overlapping and late results are rejected after a session/branch change. Headless children do not poll.
 
-Settled `dynamic_workflow` tool-result usage is the persisted subagent source of truth. Live event costs are included only until the matching result is persisted, avoiding double-counting during the active-to-settled transition.
+The sidebar shows execution names and observed phases, worker status and current tool, elapsed time, actual model/thinking, calls/turns and actor ownership. Worker token/cache rows are omitted. A TODO in `fabricWorkerRows` reserves genuine context usage and latest-prompt cache hit rate for a future reliable data source; cumulative run counters remain in state for accounting. Parent links indent recursive workers. Idle actor queues, peer sessions and full transcripts remain in `/fabric`; the sidebar stays read-only.
+
+Terminal provider results are captured before audit trimming. Bounded, metadata-only `asoka.fabric-sidebar.v1` custom entries preserve worker/cost state without adding model context. Checkpoints bind to their exact active-branch boundary; `/tree` reconstructs that branch and does not reimport older off-branch registry runs. Restored unfinished workers are marked stale until observed live. Poll snapshots save at most every 30 seconds, with immediate saves for terminal results and shutdown. Limits are 128 worker records, 12 executions and 256 KiB per checkpoint; exceeded limits mark coverage incomplete.
+
+The old workflow event bus, state and rendering code are removed. A small parser in `session-cost.ts` still reads historical `dynamic_workflow` tool results, deduplicating them by run ID without importing the deleted extension.
+
+The duplicate editor-area Fabric panel is an above-editor widget, not a native footer status. `ui.widget: "hidden"` removes it while `ui.enabled: true` preserves `/fabric` and focused conversations. This does not suppress prewalk's separate armed/switching/error status. Set Widget back to Auto in `/fabric settings` if you want the upstream panel alongside the sidebar.
 
 ## Context and cost
 
-Context usage is muted at 50% or below (and when unknown), accented above 50% through 80%, and shown as an error above 80%. When Pi reports cache activity, the latest assistant prompt's cache hit rate appears between context usage and total cost. Cost is partitioned into Total, Main, and Subagents when panel height permits.
+Context usage is muted at 50% or below (and when unknown), accented above 50% through 80%, and shown as an error above 80%. When Pi reports cache activity, the latest assistant prompt's cache hit rate appears between context usage and total cost. Main includes assistant usage, direct tool billing and compaction. Subagents adds each verified Pi worker run once, across repeated run/wait/list observations and recursive records, plus legacy workflow billing. Actor worker activations use their run IDs rather than actor IDs. Outer Fabric billing is not treated as inclusive worker usage. The display uses Reported instead of Total when live data, history or attribution is incomplete; Claude/Veda records remain visible but are not silently assumed to have Pi's billing semantics. Token counters are cumulative usage, not context occupancy. Full historical coverage cannot be recovered from a trimmed trace alone.
 
 ## Compatibility and lifecycle
 

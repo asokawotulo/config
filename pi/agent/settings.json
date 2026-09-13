@@ -10,7 +10,11 @@
   ],
   "packages": [
     "npm:@ff-labs/pi-fff",
-    "npm:pi-mcp-adapter"
+    "npm:pi-mcp-adapter",
+    "npm:pi-fabric"
+  ],
+  "extensions": [
+    "-extensions/tool-diffs/index.ts"
   ],
   "compaction": {
     "enabled": false
