@@ -87,6 +87,7 @@ function makeCanonical(
     rows?: number;
     documentRows?: number;
     editorRows?: number;
+    footerMinimum?: 0 | 1;
   } = {},
 ) {
   const terminal = new TestTerminal(options.columns ?? 120, options.rows ?? 30);
@@ -116,7 +117,7 @@ function makeCanonical(
     { component: components[3]!, shrink: 1, minSize: 0 },
     { component: components[4]!, shrink: 1, minSize: 3 },
     { component: components[5]!, shrink: 1, minSize: 0 },
-    { component: components[6]!, shrink: 1, minSize: 1 },
+    { component: components[6]!, shrink: 1, minSize: options.footerMinimum ?? 0 },
   ]);
   const root = new VStack([
     { component: transcript, basis: 0, grow: 1, shrink: 1, minSize: 1 },
@@ -188,6 +189,35 @@ describe("fullscreen layout contract", () => {
     expect(probe.snapshot.dockEntries[0]).not.toBe(
       stack(fixture.dock).entries[0],
     );
+  });
+
+  test.each([0, 1] as const)("preserves the footer minimum of %i across install and uninstall", (footerMinimum) => {
+    const fixture = makeCanonical({ footerMinimum });
+    const originalEntries = stack(fixture.dock).entries.map((entry) => ({ ...entry }));
+    expect(probeFullscreenLayout(fixture.tui).status).toBe("ready");
+    expect(fixture.adapter.setSidebarVisible(true)).toEqual({ status: "installed" });
+    expect(fixture.adapter.uninstall()).toBe(true);
+    expect(stack(fixture.dock).entries).toEqual(originalEntries);
+    expect(probeFullscreenLayout(fixture.tui).status).toBe("ready");
+  });
+
+  test("rejects unsupported footer minimums and changes to other dock entries", () => {
+    for (const minimum of [undefined, -1, 2, "0"]) {
+      const fixture = makeCanonical();
+      stack(fixture.dock).entries[5]!.minSize = minimum;
+      expect(probeFullscreenLayout(fixture.tui)).toEqual({
+        status: "incompatible",
+        reason: "dock-contract-mismatch",
+      });
+    }
+    for (const footerMinimum of [0, 1] as const) {
+      const fixture = makeCanonical({ footerMinimum });
+      stack(fixture.dock).entries[0]!.minSize = 1;
+      expect(probeFullscreenLayout(fixture.tui)).toEqual({
+        status: "incompatible",
+        reason: "dock-contract-mismatch",
+      });
+    }
   });
 
   test("distinguishes regular mode, unmounted roots, and missing capabilities", () => {

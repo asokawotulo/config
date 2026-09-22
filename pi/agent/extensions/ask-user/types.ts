@@ -22,24 +22,25 @@ export interface AnswerState {
   custom?: string;
 }
 
-export interface SubmittedAnswer {
+// Closed object types keep persisted tool-result details assignable to JsonValue.
+export type SubmittedAnswer = {
   kind: "option" | "custom";
   label: string;
   optionIndex?: number;
-}
+};
 
-export interface QuestionResult {
+export type QuestionResult = {
   id: string;
   question: string;
   type: Question["type"];
   answered: boolean;
   answers: SubmittedAnswer[];
-}
+};
 
-export interface AskUserDetails {
+export type AskUserDetails = {
   status: "submitted" | "declined" | "cancelled" | "no_ui";
   questions: QuestionResult[];
-}
+};
 
 export type DialogResult =
   | { kind: "submitted"; answers: AnswerState[] }

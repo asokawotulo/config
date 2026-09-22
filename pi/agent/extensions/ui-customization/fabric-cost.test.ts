@@ -24,6 +24,46 @@ const result = (cost: unknown) =>
     },
   });
 
+describe("standalone session usage costs", () => {
+  const standalone = (kind: string, cost: unknown) => ({
+    type: "usage" as const,
+    kind,
+    usage: { cost },
+  });
+
+  test("counts cache warming and unknown usage kinds as main-session costs", () => {
+    expect(calculateSessionCosts([
+      standalone("cache_warm", { total: 0.015 }),
+    ])).toEqual({ total: 0.015, main: 0.015, subagents: 0 });
+    expect(calculateSessionCosts([
+      assistant,
+      standalone("cache_warm", { total: 0.25 }),
+      standalone("future-operation", { total: 0.5 }),
+    ])).toEqual({ total: 1.75, main: 1.75, subagents: 0 });
+  });
+
+  test("keeps standalone usage separate from Fabric worker billing", () => {
+    const entries = [assistant, result(2), standalone("cache_warm", { total: 0.25 })];
+    expect(calculateSessionCosts(entries, { reportedCost: 4 })).toEqual({
+      total: 7.25,
+      main: 3.25,
+      subagents: 4,
+    });
+    expect(calculateSessionCosts(entries)).toEqual({
+      total: 3.25,
+      main: null,
+      subagents: null,
+    });
+  });
+
+  test("ignores malformed standalone usage", () => {
+    for (const cost of [undefined, -1, NaN, Infinity, "2", { total: -1 }]) {
+      expect(calculateSessionCosts([assistant, standalone("cache_warm", cost)]).total).toBe(1);
+    }
+    expect(calculateSessionCosts([assistant, { type: "usage" }]).total).toBe(1);
+  });
+});
+
 describe("Fabric sidebar costs", () => {
   test("counts outer usage once and hides an unknown partition", () => {
     expect(calculateSessionCosts([assistant, result({ total: 2 })])).toEqual({

@@ -1,5 +1,8 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 
+// Usage entries were added in Pi 0.86. Keep this reader usable with 0.85 types.
+type CostEntry = SessionEntry | { type: "usage"; usage?: unknown };
+
 export interface SessionCosts {
   total: number;
   /** Null when Fabric combines worker and other tool usage. */
@@ -54,7 +57,7 @@ function workflowDetailsCost(agents: readonly unknown[] | undefined): number {
  * the deleted workflow extension. Fabric workers are accounted separately.
  */
 export function calculateSessionCosts(
-  entries: readonly SessionEntry[],
+  entries: readonly CostEntry[],
   fabric?: { reportedCost: number },
 ): SessionCosts {
   let main = 0;
@@ -94,7 +97,10 @@ export function calculateSessionCosts(
         usageCost(message.usage) ?? workflowDetailsCost(details.agents);
       continue;
     }
-    if (entry.type === "compaction" || entry.type === "branch_summary") {
+    if (
+      entry.type === "compaction" || entry.type === "branch_summary" ||
+      entry.type === "usage"
+    ) {
       main += usageCost(entry.usage) ?? 0;
     }
   }
