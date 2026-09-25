@@ -333,11 +333,13 @@ class SidebarSeparatorComponent implements Component {
   constructor(
     private readonly getTheme: () => Theme,
     private readonly getHeight: () => number,
+    private readonly isActive: () => boolean,
   ) {}
 
   invalidate(): void {}
 
   render(_width: number): string[] {
+    if (!this.isActive()) return [" "];
     const line = this.getTheme().fg("borderMuted", "│");
     return Array.from(
       { length: Math.max(1, Math.floor(this.getHeight())) },
@@ -356,6 +358,7 @@ class SidebarContentComponent implements Component {
     private readonly getMetadata: () => SidebarMetadata,
     private readonly getTheme: () => Theme,
     private readonly getHeight: () => number,
+    private readonly isActive: () => boolean,
   ) {}
 
   invalidate(): void {
@@ -366,6 +369,7 @@ class SidebarContentComponent implements Component {
   }
 
   render(width: number): string[] {
+    if (!this.isActive()) return [" ".repeat(Math.max(1, Math.floor(width)))];
     const height = Math.max(1, Math.floor(this.getHeight()));
     if (
       this.cachedLines &&
@@ -410,6 +414,7 @@ class SidebarContentComponent implements Component {
 export class SidebarComponent extends HStack {
   private readonly separator: SidebarSeparatorComponent;
   private readonly contentViewport: ScrollView;
+  private readonly lifecycle: { active: boolean };
   private cachedWidth: number | undefined;
   private cachedHeight: number | undefined;
   private cachedLines: string[] | undefined;
@@ -419,11 +424,18 @@ export class SidebarComponent extends HStack {
     getTheme: () => Theme,
     private readonly getHeight: () => number,
   ) {
-    const separator = new SidebarSeparatorComponent(getTheme, getHeight);
+    const lifecycle = { active: true };
+    const isActive = () => lifecycle.active;
+    const separator = new SidebarSeparatorComponent(
+      getTheme,
+      getHeight,
+      isActive,
+    );
     const content = new SidebarContentComponent(
       getMetadata,
       getTheme,
       getHeight,
+      isActive,
     );
     const contentViewport = new ScrollView(content, {
       primary: false,
@@ -448,6 +460,13 @@ export class SidebarComponent extends HStack {
     ]);
     this.separator = separator;
     this.contentViewport = contentViewport;
+    this.lifecycle = lifecycle;
+  }
+
+  deactivate(): void {
+    if (!this.lifecycle.active) return;
+    this.lifecycle.active = false;
+    this.invalidate();
   }
 
   override invalidate(): void {
@@ -460,6 +479,7 @@ export class SidebarComponent extends HStack {
   /** Preserve normal component rendering for measurement and focused tests. */
   override render(width: number): string[] {
     const safeWidth = Math.max(1, Math.floor(width));
+    if (!this.lifecycle.active) return [" ".repeat(safeWidth)];
     const height = Math.max(1, Math.floor(this.getHeight()));
     if (
       this.cachedLines &&

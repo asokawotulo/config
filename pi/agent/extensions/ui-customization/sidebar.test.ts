@@ -8,6 +8,7 @@ import type {
 import {
   TuiAltScreen,
   visibleWidth,
+  type Component,
   type Terminal,
 } from "@earendil-works/pi-tui";
 import {
@@ -294,6 +295,38 @@ describe("status widget metadata", () => {
 });
 
 describe("SidebarComponent", () => {
+  test("deactivated children never consult stale session callbacks", () => {
+    let stale = false;
+    const live = <T>(value: T): T => {
+      if (stale) throw new Error("stale session callback");
+      return value;
+    };
+    const sidebar = new SidebarComponent(
+      () => live(widgetMetadata()),
+      () => live(identityTheme()),
+      () => live(34),
+    );
+    expect(sidebar.render(SIDEBAR_WIDTH).join("\n")).toContain("~/config");
+    const [separator, viewport] = (sidebar as unknown as {
+      children: Component[];
+    }).children;
+    const content = (viewport as unknown as { children: Component[] })
+      .children[0]!;
+
+    stale = true;
+    sidebar.deactivate();
+    sidebar.deactivate();
+    expect(separator!.render(1)).toEqual([" "]);
+    expect(content.render(SIDEBAR_WIDTH - 1)).toEqual([
+      " ".repeat(SIDEBAR_WIDTH - 1),
+    ]);
+    expect(sidebar.render(SIDEBAR_WIDTH)).toEqual([
+      " ".repeat(SIDEBAR_WIDTH),
+    ]);
+    sidebar.invalidate();
+    expect(sidebar.render(SIDEBAR_WIDTH).join("")).not.toContain("config");
+  });
+
   test("renders a 50-column panel with sections in the required order", () => {
     const sidebar = new SidebarComponent(
       widgetMetadata,

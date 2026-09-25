@@ -183,7 +183,14 @@ function makeGitRefreshHarness() {
     return transcriptColumns.entries[1]!.component.render(50).join("\n");
   };
 
-  return { fixture, handlers, makeContext, requests, sidebarText };
+  return {
+    fixture,
+    handlers,
+    makeContext,
+    requests,
+    sidebarText,
+    getFooter: () => footer as (Component & { dispose?: () => void }) | undefined,
+  };
 }
 
 describe("ui customization docked lifecycle", () => {
@@ -459,6 +466,63 @@ describe("ui customization docked lifecycle", () => {
     expect((tui as unknown as { layoutRoot: Component }).layoutRoot).toBe(
       incompatibleRoot,
     );
+  });
+
+  test("footer disposal deactivates retained sidebar and cancels reconciliation", async () => {
+    const h = makeGitRefreshHarness();
+    const ctx = h.makeContext("session", "/repo");
+    for (const handler of h.handlers.get("session_start") ?? []) {
+      handler({}, ctx);
+    }
+    const footer = h.getFooter()!;
+    const oldSidebar = stack(stack(h.fixture.root).children[0]!).children[1]!;
+    footer.render(120);
+    footer.dispose?.();
+    expect(oldSidebar.render(50)).toEqual([" ".repeat(50)]);
+    await Promise.resolve();
+    expect(h.fixture.root.children).toEqual([
+      h.fixture.transcript,
+      h.fixture.dock,
+    ]);
+  });
+
+  test("shutdown deactivates queued footer renders and old sidebar across replacement", async () => {
+    const h = makeGitRefreshHarness();
+    const oldCtx = h.makeContext("old", "/repo/old");
+    const newCtx = h.makeContext("new", "/repo/new");
+    for (const handler of h.handlers.get("session_start") ?? []) {
+      handler({}, oldCtx);
+    }
+    const oldFooter = h.getFooter()!;
+    const oldColumn = stack(h.fixture.root).children[0]!;
+    const oldSidebar = stack(oldColumn).children[1]!;
+    expect(oldSidebar.render(50).join("\n")).toContain("old");
+    oldFooter.render(120); // Queue a reconcile before shutdown.
+
+    for (const handler of h.handlers.get("session_shutdown") ?? []) {
+      handler({}, oldCtx);
+    }
+    expect(oldSidebar.render(50)).toEqual([" ".repeat(50)]);
+    oldFooter.invalidate();
+    oldFooter.render(120);
+    await Promise.resolve();
+    expect(h.fixture.root.children).toEqual([
+      h.fixture.transcript,
+      h.fixture.dock,
+    ]);
+
+    for (const handler of h.handlers.get("session_start") ?? []) {
+      handler({}, newCtx);
+    }
+    expect(h.sidebarText()).toContain("new");
+    oldFooter.dispose?.(); // A late host disposal must not touch the replacement.
+    await Promise.resolve();
+    expect(h.sidebarText()).toContain("new");
+    expect(oldSidebar.render(50)).toEqual([" ".repeat(50)]);
+    expect(stack(h.fixture.root).children).not.toEqual([
+      h.fixture.transcript,
+      h.fixture.dock,
+    ]);
   });
 
   test("drains only the latest cwd requested during a deferred Git refresh", async () => {

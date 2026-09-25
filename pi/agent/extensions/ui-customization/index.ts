@@ -16,6 +16,7 @@ export default function uiCustomization(pi: ExtensionAPI) {
   let sidebarRequested = true;
   let compatibilityWarned = false;
   let restoreDefaultFooter: (() => void) | undefined;
+  let deactivateFooter: (() => void) | undefined;
   let git: GitMetadata = { branchWorktree: "" };
   let gitRefreshGeneration = 0;
   let gitRefreshRunning = false;
@@ -133,6 +134,12 @@ export default function uiCustomization(pi: ExtensionAPI) {
       layoutAdapter = nextAdapter;
       sidebar = nextSidebar;
 
+      const deactivate = () => {
+        active = false;
+        nextSidebar.deactivate();
+      };
+      deactivateFooter = deactivate;
+
       const scheduleDefaultFooterRestore = () => {
         if (restoreScheduled) return;
         restoreScheduled = true;
@@ -144,7 +151,7 @@ export default function uiCustomization(pi: ExtensionAPI) {
       restoreDefaultFooter = scheduleDefaultFooterRestore;
 
       const scheduleReconcile = () => {
-        if (reconcileScheduled) return;
+        if (!active || reconcileScheduled) return;
         reconcileScheduled = true;
         queueMicrotask(() => {
           reconcileScheduled = false;
@@ -163,12 +170,14 @@ export default function uiCustomization(pi: ExtensionAPI) {
           return [];
         },
         invalidate(): void {
+          if (!active) return;
           nextSidebar.invalidate();
           scheduleReconcile();
         },
         dispose(): void {
-          active = false;
+          deactivate();
           nextAdapter?.uninstall();
+          if (deactivateFooter === deactivate) deactivateFooter = undefined;
           if (layoutAdapter === nextAdapter) layoutAdapter = undefined;
           if (sidebar === nextSidebar) sidebar = undefined;
           if (restoreDefaultFooter === scheduleDefaultFooterRestore) {
@@ -182,7 +191,9 @@ export default function uiCustomization(pi: ExtensionAPI) {
   const resetSessionState = () => {
     gitRefreshGeneration += 1;
     pendingGitRefresh = undefined;
+    deactivateFooter?.();
     layoutAdapter?.uninstall();
+    deactivateFooter = undefined;
     layoutAdapter = undefined;
     sidebar = undefined;
     restoreDefaultFooter = undefined;
