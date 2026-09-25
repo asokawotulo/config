@@ -3,7 +3,8 @@
   "theme": "flatland-monokai-improved",
   "tuiMode": "fullscreen",
   "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6-astra",
+  "defaultModel": "gpt-6-sol",
+  "defaultThinkingLevel": "high",
   "enabledModels": [
     "openai-codex/*",
     "opencode/*"
