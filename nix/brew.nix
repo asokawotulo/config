@@ -27,6 +27,7 @@
 
       # Python Dependencies
       "weasyprint"
+      "libpq"
 
       # Misc
       "ffmpeg"
