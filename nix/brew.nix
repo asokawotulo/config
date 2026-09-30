@@ -10,6 +10,7 @@
       "anomalyco/tap/opencode" # OpenCode is kept here because updates happen frequently, and we want to keep it up to date independently from nixpkgs.
       "bun"
       "docker-credential-helper-ecr"
+      "glab"
       "pi-coding-agent"
       "rustup"
 
