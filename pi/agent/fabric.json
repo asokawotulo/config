@@ -13,13 +13,6 @@
     "agent": "allow"
   },
   "capture": {
-    "keepVisible": [
-      "fabric_exec",
-      "ask_user",
-      "firecrawl_search",
-      "firecrawl_scrape",
-      "firecrawl_crawl"
-    ],
     "risks": {
       "ask_user": "read",
       "firecrawl_search": "network",
@@ -27,10 +20,13 @@
       "firecrawl_crawl": "network"
     }
   },
+  "mcp": {
+    "nativeServers": []
+  },
   "agents": {
     "runner": "pi",
     "transport": "process",
-    "model": "openai-codex/gpt-6-astra",
+    "model": "openai/gpt-6-astra",
     "thinking": "medium",
     "extensions": true,
     "defaultTools": [

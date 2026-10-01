@@ -39,8 +39,13 @@ class TestTerminal implements Terminal {
     public columns: number,
     public rows: number,
   ) {}
-  start(): void {}
-  stop(): void {}
+  private onInput?: (data: string) => void;
+  start(onInput: (data: string) => void): void { this.onInput = onInput; }
+  stop(): void { this.onInput = undefined; }
+  input(data: string): void {
+    if (!this.onInput) throw new Error("Terminal is not started");
+    this.onInput(data);
+  }
   async drainInput(): Promise<void> {}
   write(data: string): void {
     this.writes.push(data);
@@ -514,12 +519,10 @@ describe("SidebarLayoutAdapter", () => {
     expect(runtime(fixture.tui).currentLayout!.primaryScrollView).toBe(
       fixture.transcript,
     );
-    (
-      fixture.tui as unknown as {
-        routeWheel(event: { direction: number; x: number; y: number }): void;
-      }
-    ).routeWheel({ direction: -1, x: 0, y: 0 });
+    // Send real SGR input rather than depending on routeWheel's private signature.
+    fixture.terminal.input("\x1b[<64;1;1M");
     expect(fixture.transcript.scrollTop).toBe(before - 1);
+    fixture.tui.stop();
   });
 
   test("rejects a second owner without replacing its custom root", () => {

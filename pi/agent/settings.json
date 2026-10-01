@@ -1,23 +1,24 @@
 {
-  "lastChangelogVersion": "0.87.1",
+  "lastChangelogVersion": "0.99.1",
   "theme": "flatland-monokai-improved",
   "tuiMode": "fullscreen",
-  "defaultProvider": "openai-codex",
-  "defaultModel": "gpt-6-sol",
+  "defaultProvider": "openai",
+  "defaultModel": "gpt-6.1-sol",
   "defaultThinkingLevel": "high",
   "enabledModels": [
-    "openai-codex/*",
+    "openai/*",
     "opencode/*"
   ],
   "packages": [
     "npm:@ff-labs/pi-fff",
-    "npm:pi-mcp-adapter",
     "npm:pi-fabric"
   ],
   "extensions": [
     "-extensions/tool-diffs/index.ts"
   ],
   "compaction": {
-    "enabled": false
-  }
+    "enabled": true
+  },
+  "hideThinkingBlock": false,
+  "deviceId": "d7a0d971-919a-40e2-9b72-ee8b55d35b9a"
 }

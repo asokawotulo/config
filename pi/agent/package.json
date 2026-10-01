@@ -8,17 +8,17 @@
     "test": "bun test"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "0.99.1",
+    "@earendil-works/pi-coding-agent": "0.99.1",
+    "@earendil-works/pi-tui": "0.99.1",
     "@types/bun": "latest",
+    "typebox": "1.3.27",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.85.1",
-    "@earendil-works/pi-coding-agent": "0.85.1",
-    "@earendil-works/pi-tui": "0.85.1",
     "diff": "8.0.4",
     "effect": "^4.0.0-beta.99",
     "firecrawl": "^4.30.1",
-    "grok-mermaid": "0.2.2",
-    "typebox": "^1.3.9"
+    "grok-mermaid": "0.2.2"
   }
 }

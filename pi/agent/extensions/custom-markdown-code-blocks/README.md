@@ -27,7 +27,7 @@ Changed byte ranges use two extension-consumed values from the active user theme
 
 These values are accepted by Pi's theme loader but are not native `ThemeBg` tokens. The extension converts their foreground ANSI representation into a background. If a theme omits them, additions use `toolSuccessBg` and removals use `toolErrorBg`.
 
-Pi and terminal SGR colors support six-digit `#RRGGBB`, not per-cell alpha. Do not use eight-digit values such as `#00FF0055`: Pi 0.83 rejects them while constructing the theme. To approximate transparency, pre-blend the foreground with the terminal background and store the resulting solid RGB value. For example, 33% green and red over `#1A1D20` are approximately `#116815` and `#661315`.
+Pi supports short and six-digit RGB, OKLCH, and OKHSL colors, but not per-cell alpha. Do not use eight-digit values such as `#00FF0055`. To approximate transparency, pre-blend the foreground with the terminal background and store the resulting solid RGB value. For example, 33% green and red over `#1A1D20` are approximately `#116815` and `#661315`.
 
 At fewer than 72 content columns, the renderer delegates back to Pi's normal unified `diff` rendering. At wider widths, long source and metadata lines wrap within the frame instead of being truncated. Before/After cells remain top-aligned, with markers shown only on the first visual line and syntax and diff backgrounds preserved across continuation lines.
 
@@ -46,6 +46,6 @@ Returning `undefined` from a renderer delegates that block to Pi's original Mark
 
 The renderer-neutral diff alignment, highlighting, theming, and responsive pane logic lives in `../../lib/side-by-side-diff/` and is shared with the `tool-diffs` extension. This extension only adapts that renderer to fenced Markdown.
 
-This extension uses a transitional contract validated with Pi 0.83 and 0.84.1–0.84.4. Pi 0.83 has no Markdown extension hook; Pi 0.84.1–0.84.4 exposes `registerMarkdownTransformer`, but that API can return only Markdown strings rather than custom TUI components. The extension therefore still patches the shared `Markdown.prototype.render` method and stores patch state under `asoka.pi.custom-markdown-code-blocks` so reloads are idempotent.
+Pi's `registerMarkdownTransformer` API returns Markdown strings rather than custom TUI components. The extension therefore patches the shared `Markdown.prototype.render` method and stores patch state under `asoka.pi.custom-markdown-code-blocks` so reloads are idempotent.
 
-On Pi 0.84.1–0.84.4, the adapter applies `MarkdownOptions.transform` exactly once to the complete source at the available content width before discovering custom fences. Ordinary Markdown and custom-renderer fallbacks delegate with `transform` removed so it cannot run again, while all other options, including `renderLatex`, are retained. Pi 0.83 follows the same path with no transform option. Replace the patch when Pi exposes an official code-block component renderer hook.
+The adapter applies `MarkdownOptions.transform` exactly once to the complete source at the available content width before discovering custom fences. Ordinary Markdown and custom-renderer fallbacks delegate with `transform` removed so it cannot run again, while all other options, including `renderLatex`, are retained. Replace the patch when Pi exposes an official code-block component renderer hook.
