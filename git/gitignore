@@ -31,3 +31,4 @@ Temporary Items
 
 # Pi Fabric runtime state
 /.pi/fabric/
+.jev-fabric-native/*
