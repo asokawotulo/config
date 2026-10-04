@@ -103,6 +103,32 @@ export class FabricSidebarState {
       this.observe(item);
     }
     if (values.length > MAX_FABRIC_WORKERS) this.problems.add("worker_limit");
+    // A successful poll is an authoritative live set, including nested runs.
+    // Do not infer completion when a run disappears: cleanup can race our poll.
+    const live = new Set<string>();
+    let complete = true;
+    const remember = (item: unknown, depth = 0): void => {
+      if (depth > 8) {
+        complete = false;
+        return;
+      }
+      if (Array.isArray(item)) {
+        if (item.length > MAX_FABRIC_WORKERS) complete = false;
+        for (const child of item.slice(0, MAX_FABRIC_WORKERS))
+          remember(child, depth + 1);
+        return;
+      }
+      if (!isRecord(item)) return;
+      if (item.rootId !== undefined && item.rootId !== this.fabricRoot) return;
+      if (id(item.id) && typeof item.runner === "string")
+        live.add(JSON.stringify([item.runner, item.id]));
+      if (Array.isArray(item.nestedAgents))
+        remember(item.nestedAgents, depth + 1);
+    };
+    remember(values);
+    if (complete)
+      for (const [key, row] of this.workers)
+        if (!live.has(key)) row.stale = true;
   }
   observe(value: unknown, parentId?: string, depth = 0): void {
     if (depth > 8) {
@@ -299,12 +325,16 @@ export class FabricSidebarState {
       issues.add("missing_worker_usage");
     if (this.connection !== "live") issues.add("live_data_unavailable");
     return {
-      workers: [...this.workers.values()].sort(
-        (a, b) =>
-          Number(["running", "queued"].includes(b.status)) -
-            Number(["running", "queued"].includes(a.status)) ||
-          b.updatedAt - a.updatedAt,
-      ),
+      // Actor runs are cleaned up between messages. Keep their cost history,
+      // but do not display retained runs as if the actor were still working.
+      workers: [...this.workers.values()]
+        .filter((w) => !(w.actorId && w.stale))
+        .sort(
+          (a, b) =>
+            Number(!b.stale && ["running", "queued"].includes(b.status)) -
+              Number(!a.stale && ["running", "queued"].includes(a.status)) ||
+            b.updatedAt - a.updatedAt,
+        ),
       executions: [...this.executions.values()].reverse(),
       reportedCost: summary.reportedCost,
       complete: issues.size === 0,

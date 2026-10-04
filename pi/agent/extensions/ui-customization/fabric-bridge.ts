@@ -84,8 +84,10 @@ export function registerFabricSidebar(pi: ExtensionAPI, changed: () => void) {
           )
             return;
           expected.connected(self.rootId);
-          expected.observeLive(local);
-          expected.observeLive(lineage);
+          if (!Array.isArray(local) || !Array.isArray(lineage))
+            throw new Error("Invalid Fabric worker list");
+          // Reconcile only once against both scopes, never one partial list.
+          expected.observeLive([...local, ...lineage]);
           changed();
           persist();
         } catch {

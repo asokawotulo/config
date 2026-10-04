@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import {
   SessionManager,
   type ExtensionAPI,
@@ -213,6 +213,54 @@ describe("Fabric sidebar state", () => {
     state.observeLive([worker({ startedAt: Date.now() + 1 })]);
     expect(state.snapshot().workers).toHaveLength(1);
   });
+  test("cleaned-up actor runs leave the sidebar without losing checkpointed costs", () => {
+    const state = new FabricSidebarState("session");
+    state.connected("root");
+    const run = worker({ actorId: "supervisor", name: "spec-supervisor" });
+    state.observe(run);
+    state.observeLive([run]);
+    expect(state.snapshot().workers).toHaveLength(1);
+    state.observeLive([]);
+    expect(state.snapshot().workers).toHaveLength(0);
+    expect(state.snapshot().reportedCost).toBe(2);
+    const restored = new FabricSidebarState("session");
+    restored.hydrate([
+      base,
+      entry({
+        id: "saved", parentId: "base", type: "custom",
+        customType: FABRIC_SIDEBAR_ENTRY, data: state.checkpoint("base"),
+      }),
+    ]);
+    expect(restored.snapshot().workers).toHaveLength(0);
+    expect(restored.snapshot().reportedCost).toBe(2);
+    // Reappearance clears the stale flag, even with the same revision.
+    state.observeLive([run]);
+    expect(state.snapshot().workers[0]?.stale).toBe(false);
+    expect(state.snapshot().reportedCost).toBe(2);
+  });
+  test("live reconciliation retains nested actors and freezes missing ordinary workers", () => {
+    const state = new FabricSidebarState("session");
+    state.connected("root");
+    const child = worker({ id: "child", actorId: "supervisor" });
+    const parent = worker({ nestedAgents: [child] });
+    state.observe(parent);
+    state.observeLive([parent]);
+    expect(state.snapshot().workers).toHaveLength(2);
+    expect(state.snapshot().workers.every((w) => !w.stale)).toBe(true);
+    state.observeLive([]);
+    expect(state.snapshot().workers).toHaveLength(1);
+    expect(state.snapshot().workers[0]?.stale).toBe(true);
+    expect(state.snapshot().reportedCost).toBe(4);
+  });
+  test("a truncated live tree cannot hide unseen actor runs", () => {
+    const state = new FabricSidebarState("session");
+    state.connected("root");
+    state.observe(worker({ actorId: "supervisor" }));
+    state.observeLive(Array.from({ length: MAX_FABRIC_WORKERS + 1 }, () =>
+      worker({ id: "other", startedAt: Date.now() + 1 }),
+    ));
+    expect(state.snapshot().workers.find((w) => w.actorId)?.stale).toBe(false);
+  });
   test("bounded history flags incomplete coverage and never loops on cycles", () => {
     const state = new FabricSidebarState("session");
     state.connected("root");
@@ -274,6 +322,40 @@ describe("Fabric observation bridge", () => {
     ).toBe(true);
     expect(h.bridge.snapshot()).toBeUndefined();
   });
+  test("reconciles both scopes and drops a cleaned-up supervisor on the next poll", async () => {
+    const h = harness();
+    await h.emit("session_start");
+    const local = worker({ id: "local", startedAt: Date.now() + 1 });
+    const actor = worker({
+      id: "audit", actorId: "supervisor", name: "spec-supervisor",
+      startedAt: Date.now() + 1,
+    });
+    let live = true;
+    const context = {
+      signal: new AbortController().signal,
+      call: async (ref: string, args?: { scope: string }) => {
+        if (ref === "agents.self") return { kind: "root", rootId: "root" };
+        return args?.scope === "local" ? [local] : live ? [actor] : [];
+      },
+    } as unknown as FabricComponentContext;
+    const dispose = (await h.component().activate(context, undefined)) as () => void;
+    try {
+      await new Promise((r) => setTimeout(r, 25));
+      expect(h.bridge.snapshot()?.workers).toHaveLength(2);
+      expect(h.bridge.snapshot()?.workers.every((w) => !w.stale)).toBe(true);
+      live = false;
+      await new Promise((r) => setTimeout(r, 1_050));
+      expect(h.bridge.snapshot()?.workers.map((w) => w.id)).toEqual(["local"]);
+      expect(h.bridge.snapshot()?.reportedCost).toBe(4);
+      await h.emit("agent_settled");
+      await h.emit("session_start");
+      expect(h.bridge.snapshot()?.reportedCost).toBe(4);
+      expect(h.bridge.snapshot()?.workers.some((w) => w.actorId)).toBe(false);
+    } finally {
+      dispose();
+      await h.emit("session_shutdown");
+    }
+  });
   test("late poll from a previous branch is discarded", async () => {
     const h = harness();
     await h.emit("session_start");
@@ -323,6 +405,42 @@ describe("Fabric observation bridge", () => {
     expect(h.bridge.snapshot()?.reportedCost).toBe(2);
     await h.emit("session_shutdown");
   });
+});
+
+test("only live active workers keep advancing their elapsed timer", () => {
+  const clock = spyOn(Date, "now").mockReturnValue(10_000);
+  const theme = {
+    fg: (_: string, s: string) => s, bg: (_: string, s: string) => s,
+    bold: (s: string) => s,
+  } as Theme;
+  try {
+    for (const [extra, seconds] of [
+      [{}, [9, 19]],
+      [{ stale: true }, [4, 4]],
+      [{ status: "completed" }, [4, 4]],
+      [{ status: "stopped", finishedAt: 3_000 }, [2, 2]],
+    ] as const) {
+      const state = new FabricSidebarState("session");
+      state.connected("root");
+      state.observe(worker({ startedAt: 1_000, updatedAt: 5_000, ...extra }));
+      const metadata: SidebarMetadata = {
+        directory: "/repo", branchWorktree: "main", sessionName: "Fixture",
+        contextTokens: "1K", contextWindow: "100K", contextPercent: 1,
+        latestCacheHitRate: null, cost: 2, mainCost: 0, subagentCost: 2,
+        costComplete: true, modelName: "model", thinkingLevel: "high",
+        fabric: state.snapshot(),
+      };
+      for (const [i, now] of [10_000, 20_000].entries()) {
+        clock.mockReturnValue(now);
+        const text = new SidebarComponent(
+          () => metadata, () => theme, () => 65,
+        ).render(80).join("\n");
+        expect(text).toContain(` · ${seconds[i]}s`);
+      }
+    }
+  } finally {
+    clock.mockRestore();
+  }
 });
 
 test("Fabric replaces workflow rows, with responsive costs and worker details", () => {

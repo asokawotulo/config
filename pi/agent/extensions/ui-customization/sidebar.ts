@@ -138,10 +138,15 @@ function fabricWorkerRows(
     },
   ];
   if (compact) return rows;
+  const end =
+    worker.finishedAt ??
+    (!worker.stale && ["running", "queued"].includes(worker.status)
+      ? Date.now()
+      : worker.updatedAt);
   const elapsed =
     worker.startedAt === undefined
       ? ""
-      : ` · ${Math.max(0, Math.floor(((worker.finishedAt ?? Date.now()) - worker.startedAt) / 1000))}s`;
+      : ` · ${Math.max(0, Math.floor((end - worker.startedAt) / 1000))}s`;
   rows.push({
     text: `${prefix}  ${status}${elapsed}${worker.currentTool ? ` · ${worker.currentTool}` : ""}`,
     optionalPriority: 30,
