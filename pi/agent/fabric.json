@@ -1,6 +1,6 @@
 {
   "configVersion": 4,
-  "fullCodeMode": true,
+  "fullCodeMode": false,
   "executor": {
     "kernel": "typescript",
     "runtime": "quickjs"
@@ -13,6 +13,10 @@
     "agent": "allow"
   },
   "capture": {
+    "keepVisible": [
+      "fabric_exec",
+      "ask_user"
+    ],
     "risks": {
       "ask_user": "read",
       "firecrawl_search": "network",
