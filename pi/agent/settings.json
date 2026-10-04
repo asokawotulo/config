@@ -20,5 +20,8 @@
     "enabled": true
   },
   "hideThinkingBlock": false,
-  "deviceId": "d7a0d971-919a-40e2-9b72-ee8b55d35b9a"
+  "deviceId": "d7a0d971-919a-40e2-9b72-ee8b55d35b9a",
+  "defaultTools": [
+    "codemode"
+  ]
 }
