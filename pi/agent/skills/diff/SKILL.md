@@ -32,6 +32,7 @@ When present, leave one blank line between the path, bullet list, and fence.
 
 ## Diff Rules
 
+- Keep diff fences and their contents flush left, even after a bullet list. Do not add Markdown nesting indentation to the block. Start `-` and `+` markers at column 1; preserve source-code indentation after the marker and the single leading space required for unchanged context.
 - Put the current form on `-` lines and the intended form on `+` lines.
 - Keep short unchanged excerpts from the existing file on lines beginning with one space.
 - Keep replacement runs adjacent so corresponding lines align across the panes.
