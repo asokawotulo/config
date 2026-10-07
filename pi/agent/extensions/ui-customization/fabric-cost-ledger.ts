@@ -12,15 +12,6 @@ export interface FabricCostObservation {
   basis: "own" | "subtree" | "unknown";
 }
 
-export interface FabricCostCheckpoint {
-  kind: "fabric-cost-checkpoint";
-  version: 1;
-  rootId: string;
-  /** Exact history boundary covered, not merely the latest checkpoint found. */
-  throughEntryId: string;
-  observations: FabricCostObservation[];
-}
-
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const identifier = (value: unknown): value is string =>
@@ -44,7 +35,7 @@ function observation(value: unknown): FabricCostObservation | undefined {
     (value.actorId !== undefined && !identifier(value.actorId))
   )
     return;
-  // Whitelist persisted fields. Never retain prompts, tokens, results or logs.
+  // Retain accounting fields only, not prompts, results or logs.
   return {
     rootId: value.rootId,
     runner: value.runner as FabricRunner,
@@ -98,7 +89,6 @@ export class FabricCostLedger {
     const issues = new Set(this.rejected);
     if (!historyComplete) issues.add("incomplete_history");
     let reportedCost = 0;
-    const actors: Record<string, number> = Object.create(null);
     for (const run of this.runs.values()) {
       if (run.basis !== "own") {
         issues.add("unsupported_cost_basis");
@@ -109,65 +99,11 @@ export class FabricCostLedger {
         continue;
       }
       reportedCost += run.cost;
-      if (run.actorId)
-        actors[run.actorId] = (actors[run.actorId] ?? 0) + run.cost;
     }
     return {
       reportedCost,
-      actors,
-      runCount: this.runs.size,
       complete: issues.size === 0,
       issues: [...issues].sort(),
     };
-  }
-
-  checkpoint(throughEntryId: string): FabricCostCheckpoint {
-    if (!identifier(throughEntryId))
-      throw new Error("A history boundary is required");
-    // A checkpoint must not silently discard uncertainty while being saved.
-    if (!this.summary(true).complete)
-      throw new Error("Cannot checkpoint ambiguous cost evidence");
-    return {
-      kind: "fabric-cost-checkpoint",
-      version: 1,
-      rootId: this.rootId,
-      throughEntryId,
-      observations: [...this.runs.values()]
-        .sort((a, b) => key(a).localeCompare(key(b)))
-        .map((value) => ({ ...value })),
-    };
-  }
-
-  restore(value: unknown, expectedThroughEntryId: string): boolean {
-    if (
-      !record(value) ||
-      value.kind !== "fabric-cost-checkpoint" ||
-      value.version !== 1 ||
-      value.rootId !== this.rootId ||
-      !identifier(expectedThroughEntryId) ||
-      value.throughEntryId !== expectedThroughEntryId ||
-      !Array.isArray(value.observations)
-    )
-      return false;
-    // Validate the entire checkpoint before changing any existing state.
-    const restored = new FabricCostLedger(this.rootId);
-    for (const item of value.observations) {
-      const normalized = observation(item);
-      if (
-        !normalized ||
-        normalized.rootId !== this.rootId ||
-        normalized.basis !== "own"
-      )
-        return false;
-      restored.observe(normalized);
-    }
-    if (!restored.summary(true).complete) return false;
-    // Reject a conflicting merge atomically, too.
-    const merged = new FabricCostLedger(this.rootId);
-    for (const item of this.runs.values()) merged.observe(item);
-    for (const item of restored.runs.values()) merged.observe(item);
-    if (!merged.summary(true).complete) return false;
-    for (const [id, item] of merged.runs) this.runs.set(id, item);
-    return true;
   }
 }

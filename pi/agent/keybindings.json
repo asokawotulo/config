@@ -2,6 +2,7 @@
   "tui.editor.cursorLeft": "left",
   "app.model.select": "ctrl+shift+m",
   "app.session.new": "ctrl+n",
+  "app.session.resume": "ctrl+l",
   "app.session.tree": "ctrl+shift+l",
   "app.tree.filter.labeledOnly": []
 }

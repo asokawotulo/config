@@ -442,19 +442,6 @@ describe("side-by-side diff code block", () => {
     expect(lines.some((line) => line.includes("\x1b[48;2;31;48;29m"))).toBe(true);
   });
 
-  test("reports omitted rows when a caller bounds a preview", () => {
-    const lines = renderSideBySideDiff({
-      code: "-one\n+two\n three\n four",
-      width: 100,
-      paddingX: 0,
-      theme,
-      maxRows: 1,
-    });
-
-    expect(lines?.some((line) => stripAnsi(line).includes("… 2 more rows"))).toBe(true);
-    expect(lines?.every((line) => visibleWidth(line) <= 100)).toBe(true);
-  });
-
   test("falls back to unified rendering in narrow terminals", () => {
     installDiffRenderer();
     const lines = new Markdown("```diff:typescript\n-old\n+new\n```", 1, 0, markdownTheme).render(60);

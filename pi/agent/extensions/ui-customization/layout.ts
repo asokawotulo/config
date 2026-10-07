@@ -133,12 +133,7 @@ export function probeFullscreenLayout(tui: TUI): LayoutProbe {
     !isComponent(tui.children[0]) || transcript.children[0] !== tui.children[0]
   ) return incompatible("dock-contract-mismatch");
 
-  // Pi 0.86+ allows an empty footer; older hosts reserve one row.
-  const footerMinimum = dockStack.entries[5]?.minSize;
-  if (footerMinimum !== 0 && footerMinimum !== 1) {
-    return incompatible("dock-contract-mismatch");
-  }
-  const dockMinimums = [0, 0, 0, 3, 0, footerMinimum] as const;
+  const dockMinimums = [0, 0, 0, 3, 0, 0] as const;
   for (let index = 0; index < dockMinimums.length; index += 1) {
     const component = tui.children[index + 1];
     if (!isComponent(component) || !sameEntry(dockStack.entries[index], {

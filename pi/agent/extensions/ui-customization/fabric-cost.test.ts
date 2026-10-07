@@ -25,8 +25,8 @@ const result = (cost: unknown) =>
   });
 
 describe("standalone session usage costs", () => {
-  const standalone = (kind: string, cost: unknown) => ({
-    type: "usage" as const,
+  const standalone = (kind: string, cost: unknown) => entry({
+    type: "usage",
     kind,
     usage: { cost },
   });
@@ -60,7 +60,7 @@ describe("standalone session usage costs", () => {
     for (const cost of [undefined, -1, NaN, Infinity, "2", { total: -1 }]) {
       expect(calculateSessionCosts([assistant, standalone("cache_warm", cost)]).total).toBe(1);
     }
-    expect(calculateSessionCosts([assistant, { type: "usage" }]).total).toBe(1);
+    expect(calculateSessionCosts([assistant, entry({ type: "usage" })]).total).toBe(1);
   });
 });
 
@@ -112,20 +112,21 @@ describe("Fabric sidebar costs", () => {
     });
   });
 
-  test("preserves legacy workflow totals in mixed sessions", () => {
-    const legacy = entry({
+  test("ordinary tool details cannot supply subagent billing", () => {
+    const tool = entry({
       type: "message",
       message: {
         role: "toolResult",
-        toolName: "dynamic_workflow",
+        toolName: "bash",
         usage: { cost: 3 },
-        details: { runId: "old" },
+        details: { agents: [{ usage: { cost: 99 } }] },
       },
     });
-    expect(calculateSessionCosts([assistant, legacy, result(2)])).toEqual({
-      total: 6,
-      main: null,
-      subagents: null,
+    expect(calculateSessionCosts([assistant, tool])).toEqual({
+      total: 4, main: 4, subagents: 0,
+    });
+    expect(calculateSessionCosts([assistant, tool, result(2)], { reportedCost: 4 })).toEqual({
+      total: 10, main: 6, subagents: 4,
     });
   });
 

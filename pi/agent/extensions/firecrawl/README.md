@@ -28,6 +28,6 @@ Every tool accepts `cacheMode`:
 Each request directory contains `metadata.json`, `request.json`,
 `details.json`, and the model-facing `output.json` or `output.md`. The complete
 raw API payload remains in `details.json`; tool-result details contain only
-compact operation and cache metadata, so cache hits do not reload the raw
-payload. Crawl entries also expose individual markdown documents under
+compact operation and cache metadata. Cache resolution returns model output
+and cache metadata only; cache hits never reload the raw payload. Crawl entries also expose individual markdown documents under
 `documents/`.

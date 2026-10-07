@@ -14,7 +14,7 @@
     "npm:pi-fabric"
   ],
   "extensions": [
-    "-extensions/tool-diffs/index.ts"
+    "-extensions/session-manager/index.ts"
   ],
   "compaction": {
     "enabled": true

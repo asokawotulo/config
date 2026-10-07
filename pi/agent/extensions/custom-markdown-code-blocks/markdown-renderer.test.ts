@@ -1,14 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { Markdown } from "@earendil-works/pi-tui";
+import { Markdown, type MarkdownOptions } from "@earendil-works/pi-tui";
 import {
   installCustomMarkdownCodeBlocks,
   resolveCodeBlockLanguage,
   splitMarkdownCodeBlockSections,
 } from "./markdown-renderer.ts";
-import type {
-  CustomCodeBlockRenderer,
-  TransitionalMarkdownOptions,
-} from "./types.ts";
+import type { CustomCodeBlockRenderer } from "./types.ts";
 
 const identity = (text: string) => text;
 const markdownTheme = {
@@ -137,7 +134,7 @@ describe("custom Markdown code block framework", () => {
     installCustomMarkdownCodeBlocks([noticeRenderer]);
     const source = "Before\n\n```notice\nhello\n```\n\nAfter";
     const calls: Array<{ markdown: string; width: number }> = [];
-    const options: TransitionalMarkdownOptions = {
+    const options: MarkdownOptions = {
       transform: (markdown, availableWidth) => {
         calls.push({ markdown, width: availableWidth });
         return markdown;
@@ -153,7 +150,7 @@ describe("custom Markdown code block framework", () => {
   test("caches transformed output until invalidation or width changes", () => {
     installCustomMarkdownCodeBlocks([noticeRenderer]);
     let transformCount = 0;
-    const options: TransitionalMarkdownOptions = {
+    const options: MarkdownOptions = {
       transform: (markdown) => {
         transformCount++;
         return markdown;
@@ -185,7 +182,7 @@ describe("custom Markdown code block framework", () => {
 
   test("discovers diff fences created by transform", () => {
     installCustomMarkdownCodeBlocks([diffRenderer]);
-    const options: TransitionalMarkdownOptions = {
+    const options: MarkdownOptions = {
       transform: () => "```diff\n-old\n+new\n```",
     };
 
@@ -207,7 +204,7 @@ describe("custom Markdown code block framework", () => {
         },
       },
     ]);
-    const options: TransitionalMarkdownOptions = {
+    const options: MarkdownOptions = {
       transform: () => "The diff was removed.",
     };
 
@@ -226,7 +223,7 @@ describe("custom Markdown code block framework", () => {
 
   test("renders transformed ordinary content around custom blocks", () => {
     installCustomMarkdownCodeBlocks([noticeRenderer]);
-    const options: TransitionalMarkdownOptions = {
+    const options: MarkdownOptions = {
       transform: () => "Transformed intro\n\n```notice\nhello\n```\n\nTransformed outro",
     };
 
@@ -240,7 +237,7 @@ describe("custom Markdown code block framework", () => {
   test("preserves delegated options without rerunning transform", () => {
     installCustomMarkdownCodeBlocks([noticeRenderer]);
     let transformCount = 0;
-    const options: TransitionalMarkdownOptions = {
+    const options: MarkdownOptions = {
       preserveBackslashEscapes: true,
       renderLatex: false,
       transform: (markdown) => {

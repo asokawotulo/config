@@ -23,8 +23,7 @@ export interface CacheMetadata {
   artifacts: string[];
 }
 
-export interface CacheResolution<T> {
-  details?: T;
+export interface CacheResolution {
   output: string;
   cacheHit: boolean;
   cacheDirectory?: string;

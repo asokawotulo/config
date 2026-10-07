@@ -52,7 +52,7 @@ function makeFullscreenTui() {
     { component: components[3]!, shrink: 1, minSize: 0 },
     { component: components[4]!, shrink: 1, minSize: 3 },
     { component: components[5]!, shrink: 1, minSize: 0 },
-    { component: components[6]!, shrink: 1, minSize: 1 },
+    { component: components[6]!, shrink: 1, minSize: 0 },
   ]);
   const root = new VStack([
     { component: transcript, basis: 0, grow: 1, shrink: 1, minSize: 1 },
@@ -200,7 +200,6 @@ describe("ui customization docked lifecycle", () => {
     type CommandHandler = (args: string, ctx: ExtensionContext) => unknown;
     const handlers = new Map<string, Handler[]>();
     const busHandlers = new Map<string, Array<(data: unknown) => void>>();
-    const emitted: Array<{ event: string; data: unknown }> = [];
     let shortcutHandler: ShortcutHandler | undefined;
     let commandHandler: CommandHandler | undefined;
 
@@ -228,7 +227,6 @@ describe("ui customization docked lifecycle", () => {
           busHandlers.set(event, registered);
         },
         emit(event: string, data: unknown) {
-          emitted.push({ event, data });
           for (const handler of busHandlers.get(event) ?? []) handler(data);
         },
       },
@@ -284,9 +282,6 @@ describe("ui customization docked lifecycle", () => {
     for (const handler of handlers.get("session_start") ?? [])
       handler({ type: "session_start" }, context);
     await Promise.resolve();
-    expect(
-      emitted.some(({ event }) => event.startsWith("dynamic-workflows:")),
-    ).toBe(false);
     expect(footer?.render(120)).toEqual([]);
     expect(notices).toEqual([]);
 

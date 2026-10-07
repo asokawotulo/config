@@ -504,7 +504,6 @@ export function renderSideBySideDiff({
   width,
   paddingX,
   theme,
-  maxRows,
 }: SideBySideDiffRenderContext): string[] | undefined {
   const contentWidth = width - paddingX * 2;
   if (contentWidth < MIN_SIDE_BY_SIDE_WIDTH) return undefined;
@@ -515,9 +514,7 @@ export function renderSideBySideDiff({
   const margin = " ".repeat(paddingX);
   const border = (value: string) => theme?.fg("mdCodeBlockBorder", value) ?? value;
   const lines: string[] = [];
-  const rows = alignUnifiedDiff(code);
-  const visibleRows = maxRows === undefined ? rows : rows.slice(0, Math.max(0, maxRows));
-  const hiddenRowCount = rows.length - visibleRows.length;
+  const visibleRows = alignUnifiedDiff(code);
   const highlightedRows = highlightDiffRows(visibleRows, inheritedLanguage, highlightCode);
   const beforeLineNumberWidth = Math.max(
     0,
@@ -596,13 +593,6 @@ export function renderSideBySideDiff({
           margin,
       );
     }
-  }
-
-  if (hiddenRowCount > 0) {
-    const overflow = theme?.fg("muted", `… ${hiddenRowCount} more rows`) ?? `… ${hiddenRowCount} more rows`;
-    lines.push(
-      margin + border("│ ") + padToWidth(overflow, contentWidth - 4) + border(" │") + margin,
-    );
   }
 
   lines.push(

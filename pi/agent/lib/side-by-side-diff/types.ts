@@ -9,7 +9,6 @@ export type SideBySideDiffRenderContext = {
   width: number;
   paddingX: number;
   theme?: Theme;
-  maxRows?: number;
 };
 
 export type DiffByteRange = {

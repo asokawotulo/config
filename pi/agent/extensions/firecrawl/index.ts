@@ -67,7 +67,6 @@ async function runOperation<T>(options: {
       mode: cacheMode ?? "prefer-cache",
       outputFormat,
       signal,
-      loadDetails: false,
       fetch: async () => {
         onUpdate?.({
           content: [{ type: "text", text: status }],

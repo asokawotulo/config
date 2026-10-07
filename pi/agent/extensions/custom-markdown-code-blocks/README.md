@@ -44,7 +44,7 @@ Returning `undefined` from a renderer delegates that block to Pi's original Mark
 
 ## Implementation note
 
-The renderer-neutral diff alignment, highlighting, theming, and responsive pane logic lives in `../../lib/side-by-side-diff/` and is shared with the `tool-diffs` extension. This extension only adapts that renderer to fenced Markdown.
+Diff alignment, highlighting, theming, and responsive pane logic lives in `../../lib/side-by-side-diff/`. This extension only adapts that renderer to fenced Markdown.
 
 Pi's `registerMarkdownTransformer` API returns Markdown strings rather than custom TUI components. The extension therefore patches the shared `Markdown.prototype.render` method and stores patch state under `asoka.pi.custom-markdown-code-blocks` so reloads are idempotent.
 

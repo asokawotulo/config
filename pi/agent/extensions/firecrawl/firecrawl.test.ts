@@ -102,6 +102,7 @@ describe("shared cache", () => {
     });
 
     expect(result.cacheHit).toBe(false);
+    expect(result).not.toHaveProperty("details");
     expect(result.cacheDirectory).toStartWith(root);
     expect(
       JSON.parse(await readFile(join(result.cacheDirectory!, "request.json"), "utf8")),
@@ -143,10 +144,11 @@ describe("shared cache", () => {
 
     expect(fetchCount).toBe(1);
     expect(second.cacheHit).toBe(true);
-    expect(second.details).toEqual({ results: ["one"] });
+    expect(second.output).toBe('{"results":["one"]}');
+    expect(second).not.toHaveProperty("details");
   });
 
-  test("does not load raw details when the caller does not need them", async () => {
+  test("cache hits never load raw details", async () => {
     await useTemporaryCache();
     const request = { query: "cached output only", limit: 5 };
     const first = await cachedRequest({
@@ -166,7 +168,6 @@ describe("shared cache", () => {
       request,
       mode: "prefer-cache",
       outputFormat: "json",
-      loadDetails: false,
       fetch: async () => {
         throw new Error("cache entry should be reused");
       },

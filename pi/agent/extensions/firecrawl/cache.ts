@@ -72,12 +72,11 @@ function paths(operation: FirecrawlOperation, request: unknown) {
   };
 }
 
-async function readEntry<T>(
+async function readEntry(
   operation: FirecrawlOperation,
   request: unknown,
   now: number,
-  loadDetails: boolean,
-): Promise<CacheResolution<T> | undefined> {
+): Promise<CacheResolution | undefined> {
   const { hash, directory } = paths(operation, request);
   try {
     const metadata = JSON.parse(
@@ -92,16 +91,8 @@ async function readEntry<T>(
       return undefined;
     }
 
-    const [output, details] = await Promise.all([
-      readFile(join(directory, metadata.outputFile), "utf8"),
-      loadDetails
-        ? readFile(join(directory, "details.json"), "utf8").then(
-            (text) => JSON.parse(text) as T,
-          )
-        : Promise.resolve(undefined),
-    ]);
+    const output = await readFile(join(directory, metadata.outputFile), "utf8");
     return {
-      ...(loadDetails ? { details } : {}),
       output,
       cacheHit: true,
       cacheDirectory: directory,
@@ -223,9 +214,8 @@ export async function cachedRequest<T>(options: {
   outputFormat: OutputFormat;
   signal?: AbortSignal;
   ttlMs?: number;
-  loadDetails?: boolean;
   fetch: () => Promise<CachedPayload<T>>;
-}): Promise<CacheResolution<T>> {
+}): Promise<CacheResolution> {
   const {
     operation,
     request,
@@ -233,14 +223,12 @@ export async function cachedRequest<T>(options: {
     outputFormat,
     signal,
     fetch,
-    loadDetails = true,
   } = options;
   const now = Date.now();
 
   if (mode === "no-store") {
     const payload = await fetch();
     return {
-      ...(loadDetails ? { details: payload.details } : {}),
       output: payload.output,
       cacheHit: false,
       fetchedAt: new Date(now).toISOString(),
@@ -252,7 +240,7 @@ export async function cachedRequest<T>(options: {
   await acquireLock(lockDirectory, signal);
   try {
     if (mode === "prefer-cache") {
-      const hit = await readEntry<T>(operation, request, Date.now(), loadDetails);
+      const hit = await readEntry(operation, request, Date.now());
       if (hit) return hit;
     }
 
@@ -267,7 +255,6 @@ export async function cachedRequest<T>(options: {
       now: fetchedAtMs,
     });
     return {
-      ...(loadDetails ? { details: payload.details } : {}),
       output: payload.output,
       cacheHit: false,
       cacheDirectory: stored.directory,

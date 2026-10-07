@@ -1,70 +1,32 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 
-// Usage entries were added in Pi 0.86. Keep this reader usable with 0.85 types.
-type CostEntry = SessionEntry | { type: "usage"; usage?: unknown };
-
 export interface SessionCosts {
   total: number;
-  /** Null when Fabric combines worker and other tool usage. */
+  /** Null until Fabric's worker ledger is available. */
   main: number | null;
   subagents: number | null;
 }
 
-function finiteCost(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return undefined;
-  }
-  return value;
-}
-
-function usageCost(value: unknown): number | undefined {
-  if (!value || typeof value !== "object") return undefined;
+function usageCost(value: unknown): number {
+  if (!value || typeof value !== "object") return 0;
   const cost = (value as { cost?: unknown }).cost;
-  return finiteCost(
-    typeof cost === "number"
-      ? cost
-      : cost && typeof cost === "object"
-        ? (cost as { total?: unknown }).total
-        : undefined,
-  );
+  const total = typeof cost === "number"
+    ? cost
+    : cost && typeof cost === "object"
+      ? (cost as { total?: unknown }).total
+      : undefined;
+  return typeof total === "number" && Number.isFinite(total) && total >= 0
+    ? total
+    : 0;
 }
 
-function workflowDetails(value: unknown): {
-  runId?: string;
-  agents?: unknown[];
-} {
-  if (!value || typeof value !== "object") return {};
-  const details = value as { runId?: unknown; agents?: unknown };
-  return {
-    ...(typeof details.runId === "string" ? { runId: details.runId } : {}),
-    ...(Array.isArray(details.agents) ? { agents: details.agents } : {}),
-  };
-}
-
-function workflowDetailsCost(agents: readonly unknown[] | undefined): number {
-  let total = 0;
-  for (const value of agents ?? []) {
-    if (!value || typeof value !== "object") continue;
-    const agent = value as { cost?: unknown; usage?: unknown };
-    total += finiteCost(agent.cost) ?? usageCost(agent.usage) ?? 0;
-  }
-  return total;
-}
-
-/**
- * Read persisted parent/tool billing, including historical dynamic_workflow
- * results. Legacy run IDs deduplicate replayed records without depending on
- * the deleted workflow extension. Fabric workers are accounted separately.
- */
+/** Read parent/tool billing; Fabric's deduplicated ledger owns worker costs. */
 export function calculateSessionCosts(
-  entries: readonly CostEntry[],
+  entries: readonly SessionEntry[],
   fabric?: { reportedCost: number },
 ): SessionCosts {
   let main = 0;
-  let subagents = 0;
-  let fabricCost = 0;
   let hasFabric = false;
-  const chargedWorkflowIds = new Set<string>();
 
   for (const entry of entries) {
     if (entry.type === "message" && entry.message.role === "assistant") {
@@ -73,45 +35,23 @@ export function calculateSessionCosts(
         entry.message.content.some(
           (block) => block.type === "toolCall" && block.name === "fabric_exec",
         );
-      main += usageCost(entry.message.usage) ?? 0;
-      continue;
-    }
-    if (entry.type === "message" && entry.message.role === "toolResult") {
-      const message = entry.message;
-      if (message.toolName === "fabric_exec") {
-        hasFabric = true;
-        // Direct tool billing, e.g. approval classifiers. Worker cost comes
-        // from the separate, deduplicated Fabric ledger.
-        fabricCost += usageCost(message.usage) ?? 0;
-        continue;
-      }
-      if (message.toolName !== "dynamic_workflow") {
-        main += usageCost(message.usage) ?? 0;
-        continue;
-      }
-
-      const details = workflowDetails(message.details);
-      if (details.runId && chargedWorkflowIds.has(details.runId)) continue;
-      if (details.runId) chargedWorkflowIds.add(details.runId);
-      subagents +=
-        usageCost(message.usage) ?? workflowDetailsCost(details.agents);
-      continue;
-    }
-    if (
+      main += usageCost(entry.message.usage);
+    } else if (entry.type === "message" && entry.message.role === "toolResult") {
+      hasFabric ||= entry.message.toolName === "fabric_exec";
+      // Direct tool billing, e.g. approval classifiers. Never infer worker
+      // costs from tool details or assume outer billing includes worker usage.
+      main += usageCost(entry.message.usage);
+    } else if (
       entry.type === "compaction" || entry.type === "branch_summary" ||
       entry.type === "usage"
     ) {
-      main += usageCost(entry.usage) ?? 0;
+      main += usageCost(entry.usage);
     }
   }
 
   return {
-    total: main + subagents + fabricCost + (fabric?.reportedCost ?? 0),
-    main: fabric ? main + fabricCost : hasFabric ? null : main,
-    subagents: fabric
-      ? subagents + fabric.reportedCost
-      : hasFabric
-        ? null
-        : subagents,
+    total: main + (fabric?.reportedCost ?? 0),
+    main: fabric || !hasFabric ? main : null,
+    subagents: fabric ? fabric.reportedCost : hasFabric ? null : 0,
   };
 }

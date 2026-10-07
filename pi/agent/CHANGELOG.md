@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-07 13:28
+### Changed
+- Temporarily disabled the custom session manager and bound Ctrl+L to Pi's native resume selector. Custom deletion gestures remain available when the extension is re-enabled.
+- Moved customized Supacode behavior to supacode-integration and excluded the app-managed copy so updates cannot replace it or duplicate events.
+- Simplified Firecrawl cache resolution to model output and cache metadata while retaining raw payloads and crawl documents on disk.
+- Updated documentation for Fabric orchestration-only mode.
+### Removed
+- Disabled tool-diffs extension and tests. Markdown diff rendering remains.
+- Unused Fabric ledger checkpoint/restore APIs and actor aggregates; sidebar checkpoints still preserve worker accounting.
+- Historical dynamic-workflow accounting and old Pi type/layout compatibility paths.
+
 ## 2026-09-13 20:38
 ### Added
 - Fabric integration with TypeScript/QuickJS, explicit approval configuration, read-only worker defaults and seven-day worker retention.

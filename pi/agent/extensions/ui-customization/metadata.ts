@@ -10,10 +10,6 @@ import type { GitMetadata } from "./git-metadata.ts";
 import { calculateSessionCosts } from "./session-cost.ts";
 import type { FabricSidebarSnapshot } from "./fabric-state.ts";
 
-export { resolveGitMetadata, type GitMetadata } from "./git-metadata.ts";
-export { calculateSessionCosts, type SessionCosts } from "./session-cost.ts";
-export { sanitizeTerminalText } from "../../lib/text.ts";
-
 export interface SidebarMetadata {
   directory: string;
   branchWorktree: string;

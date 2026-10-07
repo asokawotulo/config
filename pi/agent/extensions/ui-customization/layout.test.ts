@@ -1,5 +1,4 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { existsSync } from "node:fs";
 import {
   HStack,
   ScrollView,
@@ -18,7 +17,7 @@ import {
 import { SIDEBAR_WIDTH } from "./sidebar.ts";
 
 const VIEWPORT_TUI = Symbol.for("@earendil-works/pi-tui/viewport");
-// Test-only upstream import. Older hosts predate this extracted factory.
+// Test-only upstream import to verify the current host layout.
 const chatViewportModule = new URL(
   "modes/interactive/chat-viewport.js",
   import.meta.resolve("@earendil-works/pi-coding-agent"),
@@ -92,7 +91,6 @@ function makeCanonical(
     rows?: number;
     documentRows?: number;
     editorRows?: number;
-    footerMinimum?: 0 | 1;
   } = {},
 ) {
   const terminal = new TestTerminal(options.columns ?? 120, options.rows ?? 30);
@@ -122,7 +120,7 @@ function makeCanonical(
     { component: components[3]!, shrink: 1, minSize: 0 },
     { component: components[4]!, shrink: 1, minSize: 3 },
     { component: components[5]!, shrink: 1, minSize: 0 },
-    { component: components[6]!, shrink: 1, minSize: options.footerMinimum ?? 0 },
+    { component: components[6]!, shrink: 1, minSize: 0 },
   ]);
   const root = new VStack([
     { component: transcript, basis: 0, grow: 1, shrink: 1, minSize: 1 },
@@ -149,7 +147,7 @@ function renderNative(tui: TuiAltScreen): void {
 }
 
 describe("fullscreen layout contract", () => {
-  test.skipIf(!existsSync(chatViewportModule))(
+  test(
     "accepts the host's actual chat viewport factory and preserves native layout",
     async () => {
       const { createChatViewport } = await import(chatViewportModule.href);
@@ -196,18 +194,17 @@ describe("fullscreen layout contract", () => {
     );
   });
 
-  test.each([0, 1] as const)("preserves the footer minimum of %i across install and uninstall", (footerMinimum) => {
-    const fixture = makeCanonical({ footerMinimum });
+  test("preserves the current footer contract across install and uninstall", () => {
+    const fixture = makeCanonical();
     const originalEntries = stack(fixture.dock).entries.map((entry) => ({ ...entry }));
-    expect(probeFullscreenLayout(fixture.tui).status).toBe("ready");
     expect(fixture.adapter.setSidebarVisible(true)).toEqual({ status: "installed" });
     expect(fixture.adapter.uninstall()).toBe(true);
     expect(stack(fixture.dock).entries).toEqual(originalEntries);
     expect(probeFullscreenLayout(fixture.tui).status).toBe("ready");
   });
 
-  test("rejects unsupported footer minimums and changes to other dock entries", () => {
-    for (const minimum of [undefined, -1, 2, "0"]) {
+  test("rejects legacy footer minimums and changes to other dock entries", () => {
+    for (const minimum of [undefined, -1, 1, 2, "0"]) {
       const fixture = makeCanonical();
       stack(fixture.dock).entries[5]!.minSize = minimum;
       expect(probeFullscreenLayout(fixture.tui)).toEqual({
@@ -215,14 +212,12 @@ describe("fullscreen layout contract", () => {
         reason: "dock-contract-mismatch",
       });
     }
-    for (const footerMinimum of [0, 1] as const) {
-      const fixture = makeCanonical({ footerMinimum });
-      stack(fixture.dock).entries[0]!.minSize = 1;
-      expect(probeFullscreenLayout(fixture.tui)).toEqual({
-        status: "incompatible",
-        reason: "dock-contract-mismatch",
-      });
-    }
+    const fixture = makeCanonical();
+    stack(fixture.dock).entries[0]!.minSize = 1;
+    expect(probeFullscreenLayout(fixture.tui)).toEqual({
+      status: "incompatible",
+      reason: "dock-contract-mismatch",
+    });
   });
 
   test("distinguishes regular mode, unmounted roots, and missing capabilities", () => {

@@ -150,60 +150,6 @@ describe("status widget metadata", () => {
     });
   });
 
-  test("preserves historical workflow costs and deduplicates replay by run ID", () => {
-    const settled = entry({
-      type: "message",
-      message: {
-        role: "toolResult",
-        toolName: "dynamic_workflow",
-        usage: usage(5),
-        details: { runId: "settled", agents: [{ usage: usage(99) }] },
-      },
-    });
-    const assistant = entry({
-      type: "message",
-      message: { role: "assistant", usage: usage(1) },
-    });
-    expect(calculateSessionCosts([assistant, settled, settled])).toEqual({
-      total: 6,
-      main: 1,
-      subagents: 5,
-    });
-    expect(
-      calculateSessionCosts([assistant, settled, settled], { reportedCost: 2 }),
-    ).toEqual({ total: 8, main: 1, subagents: 7 });
-  });
-
-  test("supports legacy agent-detail fallback and invalid amounts without the deleted runtime", () => {
-    const legacy = (details: unknown) =>
-      entry({
-        type: "message",
-        message: { role: "toolResult", toolName: "dynamic_workflow", details },
-      });
-    const one = legacy({
-      runId: "one",
-      agents: [
-        { cost: 2 },
-        { usage: usage(3) },
-        { cost: -1 },
-        null,
-        { usage: { cost: { total: NaN } } },
-      ],
-    });
-    expect(calculateSessionCosts([one, one]).subagents).toBe(5);
-    expect(
-      calculateSessionCosts([legacy(null), legacy({ agents: "invalid" })])
-        .total,
-    ).toBe(0);
-    // Unidentified historical results remain independent; do not collapse them by tool name.
-    expect(
-      calculateSessionCosts([
-        legacy({ agents: [{ cost: 2 }] }),
-        legacy({ agents: [{ cost: 3 }] }),
-      ]).subagents,
-    ).toBe(5);
-  });
-
   test("formats context tokens, percentages, and home-relative directories", () => {
     expect(formatTokenCount(0)).toBe("0");
     expect(formatTokenCount(272_000)).toBe("272K");

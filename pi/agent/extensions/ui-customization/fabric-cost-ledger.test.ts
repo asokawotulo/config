@@ -38,7 +38,6 @@ describe("Fabric recursive and multi-runner attribution", () => {
     for (const ordered of [observations, [...observations].reverse()]) {
       const total = replay(ordered).summary(true);
       expect(total.reportedCost).toBe(6);
-      expect(total.runCount).toBe(3);
       expect(total.complete).toBe(true);
     }
   });
@@ -74,7 +73,6 @@ describe("Fabric recursive and multi-runner attribution", () => {
     ]);
     expect(ledger.summary(true)).toMatchObject({
       reportedCost: 6,
-      runCount: 3,
       complete: true,
     });
   });
@@ -128,7 +126,7 @@ describe("Fabric recursive and multi-runner attribution", () => {
   test("conflicting equal revisions stay visibly incomplete", () => {
     const ledger = replay([run(), run({ cost: 2 })]);
     expect(ledger.summary(true).issues).toContain("conflicting_revision");
-    expect(() => ledger.checkpoint("boundary")).toThrow("ambiguous");
+    expect(ledger.summary(true).complete).toBe(false);
   });
 
   test("rejects invalid amounts and IDs rather than creating free workers", () => {
@@ -156,8 +154,6 @@ describe("Fabric actor activation attribution", () => {
     ]);
     expect(ledger.summary(true)).toMatchObject({
       reportedCost: 5,
-      actors: { reviewer: 5 },
-      runCount: 2,
     });
   });
 
@@ -183,8 +179,6 @@ describe("Fabric actor activation attribution", () => {
       );
     expect(ledger.summary(true)).toMatchObject({
       reportedCost: 2,
-      actors: { reviewer: 2 },
-      runCount: 1,
     });
   });
 
@@ -197,8 +191,6 @@ describe("Fabric actor activation attribution", () => {
     ]);
     expect(ledger.summary(true)).toMatchObject({
       reportedCost: 10,
-      actors: { reviewer: 9 },
-      runCount: 4,
     });
   });
 
@@ -207,89 +199,7 @@ describe("Fabric actor activation attribution", () => {
       run({ actorId: "first" }),
       run({ actorId: "second", updatedAt: 20 }),
     ]);
-    expect(ledger.summary(true).actors).toEqual({ first: 1 });
+    expect(ledger.summary(true).reportedCost).toBe(1);
     expect(ledger.summary(true).issues).toContain("conflicting_actor_identity");
-  });
-});
-
-describe("Fabric cost checkpoint recovery", () => {
-  test("round-trips accounting only, with no transcript or tool payloads", () => {
-    const ledger = new FabricCostLedger("main");
-    ledger.observe({
-      ...run(),
-      task: "PRIVATE TASK",
-      result: "PRIVATE RESULT",
-      args: { token: "PRIVATE TOKEN" },
-    });
-    const serialized = JSON.stringify(ledger.checkpoint("entry-1"));
-    expect(serialized).not.toContain("PRIVATE");
-    const recovered = new FabricCostLedger("main");
-    expect(recovered.restore(JSON.parse(serialized), "entry-1")).toBe(true);
-    expect(recovered.summary(true)).toEqual(ledger.summary(true));
-  });
-
-  test("repeated checkpoint and audit replay is idempotent", () => {
-    const saved = replay([run(), run({ runId: "child", cost: 2 })]).checkpoint(
-      "entry-1",
-    );
-    const recovered = new FabricCostLedger("main");
-    expect(recovered.restore(saved, "entry-1")).toBe(true);
-    expect(recovered.restore(saved, "entry-1")).toBe(true);
-    recovered.observe(run());
-    recovered.observe(run({ runId: "child", cost: 3, updatedAt: 20 }));
-    expect(recovered.restore(saved, "entry-1")).toBe(true);
-    expect(recovered.summary(true)).toMatchObject({
-      reportedCost: 4,
-      runCount: 2,
-      complete: true,
-    });
-  });
-
-  test("rejects checkpoints from another root, boundary or version", () => {
-    const checkpoint = replay([run()]).checkpoint("entry-1");
-    const ledger = new FabricCostLedger("main");
-    for (const altered of [
-      { ...checkpoint, version: 2 },
-      { ...checkpoint, rootId: "peer" },
-      { ...checkpoint, throughEntryId: "older" },
-      null,
-    ]) {
-      expect(ledger.restore(altered, "entry-1")).toBe(false);
-    }
-    expect(ledger.summary(false)).toMatchObject({
-      reportedCost: 0,
-      complete: false,
-      issues: ["incomplete_history"],
-    });
-  });
-
-  test("malformed checkpoint suffix and conflicting merges cannot partially apply", () => {
-    const ledger = replay([run()]);
-    const checkpoint = replay([run({ runId: "child", cost: 2 })]).checkpoint(
-      "entry-1",
-    );
-    expect(
-      ledger.restore(
-        {
-          ...checkpoint,
-          observations: [...checkpoint.observations, { nonsense: true }],
-        },
-        "entry-1",
-      ),
-    ).toBe(false);
-    expect(ledger.summary(true).reportedCost).toBe(1);
-    const conflicting = replay([run({ cost: 9 })]).checkpoint("entry-1");
-    expect(ledger.restore(conflicting, "entry-1")).toBe(false);
-    expect(ledger.summary(true).reportedCost).toBe(1);
-  });
-
-  test("empty history and a recovered checkpoint do not prove later history is complete", () => {
-    const ledger = new FabricCostLedger("main");
-    expect(ledger.summary(false).complete).toBe(false);
-    ledger.restore(replay([run()]).checkpoint("entry-1"), "entry-1");
-    expect(ledger.summary(false)).toMatchObject({
-      reportedCost: 1,
-      complete: false,
-    });
   });
 });

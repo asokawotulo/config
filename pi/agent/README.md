@@ -12,19 +12,19 @@ bun run check
 bun test
 ```
 
-`settings.json` selects the main model, thinking level, theme, fullscreen UI, and compaction behavior. It loads Fabric and FFF as Pi packages and disables `tool-diffs`. `pi update --extensions` reconciles the configured packages. Pi supplies host peers to packages rather than installing duplicate Pi libraries under `npm/`.
+`settings.json` selects the main model, thinking level, theme, fullscreen UI, and compaction behavior. It loads Fabric and FFF as Pi packages. The local session manager and Supacode-managed extension are excluded. `pi update --extensions` reconciles the configured packages. Pi supplies host peers to packages rather than installing duplicate Pi libraries under `npm/`.
 
 ## Fabric
 
-`fabric.json` enables full code mode with TypeScript/QuickJS. The model sees only `fabric_exec`. Questionnaires and Firecrawl tools are captured along with other extension tools and are called through `extensions.ask_user` and `extensions.firecrawl_*` inside Fabric.
+`fabric.json` uses TypeScript/QuickJS in orchestration-only mode, with `fullCodeMode: false`. Pi tools and local extension tools keep their native execution path. `ask_user` remains visible; `fabric_exec` orchestrates Fabric providers and workers.
 
-Read, write, execute, network, and agent approval categories are configured to allow. Captured questionnaires are classified as read operations and Firecrawl tools as network operations. One-shot run artifacts are retained for seven days. Pi handles compaction.
+Read, write, execute, network, and agent approval categories are configured to allow. Tool risk declarations classify questionnaires as read operations and Firecrawl tools as network operations. One-shot run artifacts are retained for seven days. Pi handles compaction.
 
 Workers use Pi in separate processes with extensions enabled, medium thinking, and a maximum of four concurrent workers. Their default tools are `read`, `grep`, `find`, and `ls`. Add mutation or shell tools explicitly for implementation workers. Reviewers that need higher reasoning should request `thinking: "high"`. Partition concurrent edits by file or use worktrees. The files in `roles/` describe worker roles; Fabric does not enforce them.
 
 Use `/fabric` for activity and child conversations. Use `/skill:fabric-workflow` for an explicitly requested workflow. Advanced Fabric skills remain user-invoked; do not copy their implementation into local skills.
 
-Use `pi.find` and `pi.grep` inside `fabric_exec` for FFF search. Fabric captures the overrides, extended schemas, and prompt guidance. `pi.read` remains Pi's reader. FFF cursors belong to their originating process; do not transfer them between workers. Leave `PI_FFF_MULTIGREP` unset unless specifically testing that opt-in tool. Keep FFF mode `override`; a resumed session's saved `/fff-mode` can override startup settings.
+Use FFF's native `find` and `grep` tools for search and Pi's native `read` tool for file contents. `pi.*` and `extensions.*` are unavailable inside `fabric_exec` in orchestration-only mode. FFF cursors belong to their originating process; do not transfer them between workers. Leave `PI_FFF_MULTIGREP` unset unless specifically testing that opt-in tool. Keep FFF mode `override`; a resumed session's saved `/fff-mode` can override startup settings.
 
 Fabric recall returns historical evidence, not proof about current files. Follow source pointers and verify the current working tree before acting on an earlier conclusion.
 
@@ -36,15 +36,19 @@ Add servers with `pi mcp add`, then check them with `pi mcp list`. Add their exa
 
 ## Extensions
 
-- `ask-user`: questionnaires, called through Fabric.
+- `ask-user`: native questionnaires.
 - `firecrawl`: web search/scraping and shared cache, classified as Fabric network operations.
-- `session-manager`: rename, delete, and resume Pi sessions.
-- `supacode`: presence and notifications.
+- `session-manager`: temporarily disabled while trying Pi's native `/resume` selector. Its custom deletion gestures and implementation remain intact.
+- `supacode-integration`: user-owned presence and notifications. The app-managed `supacode/index.ts` is excluded so it cannot send duplicate events.
 - `ui-customization`: session metadata, Fabric worker activity, and deduplicated Main/Subagent costs. Incomplete coverage is labeled Reported.
 - `custom-markdown-code-blocks`: response diff fences and shared side-by-side rendering.
 - `@ff-labs/pi-fff`: search overrides and file completion.
 
-`tool-diffs` is present but disabled. Its native tests cover prompt metadata, mutation behavior, and historical replay; they do not certify Fabric's nested rendering. Markdown diff fences use the shared side-by-side renderer.
+`tool-diffs` has been removed. Markdown diff fences still use `lib/side-by-side-diff/`.
+
+Press `Ctrl+L` or run `/resume` to try the native session manager. It supports rename with `Ctrl+R` and delete with `Ctrl+D`, followed by confirmation. To restore the custom manager, remove `-extensions/session-manager/index.ts` from `settings.json` and remove `app.session.resume` from `keybindings.json`, then run `/reload`.
+
+Supacode can recreate `extensions/supacode/index.ts`; that directory is ignored by Git and its entry point stays excluded in `settings.json`. Keep custom changes in `extensions/supacode-integration/`, without the app's managed-file marker.
 
 The sidebar shows workers, costs, current tools, timing, model/thinking, call counts, and actor ownership. Worker input/output and cache rows are omitted until reliable metrics are available. A public Fabric component polls metadata without model turns; compact custom entries preserve costs across resume. `bun test extensions/ui-customization/fabric-cost*.test.ts` checks the ledger. Missing history or unverified runner attribution is labeled incomplete rather than counted as zero.
 
