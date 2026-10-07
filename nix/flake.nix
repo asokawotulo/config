@@ -75,7 +75,6 @@
           pkgs.just
           pkgs.just-lsp
           pkgs.mkcert
-          pkgs.nodejs_22
           pkgs.pnpm
           pkgs.ripgrep
           pkgs.starship

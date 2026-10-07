@@ -11,6 +11,7 @@
       "bun"
       "docker-credential-helper-ecr"
       "glab"
+      "node@24"
       "pi-coding-agent"
       "rustup"
 
