@@ -126,6 +126,7 @@ class SelectionTerminal implements Terminal {
   clearScreen(): void {}
   setTitle(): void {}
   setProgress(): void {}
+  setProgramStatus(): void {}
 }
 
 describe("status widget metadata", () => {
@@ -314,6 +315,28 @@ describe("SidebarComponent", () => {
       .render(SIDEBAR_WIDTH)
       .join("\n");
     expect(withoutCacheRate).not.toContain("Cache hit");
+  });
+
+  test("shows recorded execution durations and unknown legacy timing independently of worker elapsed time", () => {
+    const metadata = widgetMetadata([{
+      ...worker("elapsed"), startedAt: 1_000, finishedAt: 5_000, status: "completed",
+    }]);
+    for (const [durationMs, expected] of [
+      [1_250, "1.25s"], [0, "0ms"], [undefined, "?"],
+    ] as const) {
+      metadata.fabric!.executions = [{
+        id: "call", name: "Verify", status: "completed", durationMs,
+      }];
+      const sidebar = new SidebarComponent(() => metadata, identityTheme, () => 65);
+      const text = sidebar.render(SIDEBAR_WIDTH).join("\n");
+      expect(text).toContain(`Took ${expected}`);
+      expect(text).toContain("completed · 4s");
+      const narrow = sidebar.render(20);
+      expect(narrow.every((line) => visibleWidth(line) <= 20)).toBe(true);
+    }
+    metadata.fabric!.executions = [{ id: "call", name: "Verify", status: "running" }];
+    expect(new SidebarComponent(() => metadata, identityTheme, () => 65)
+      .render(SIDEBAR_WIDTH).join("\n")).not.toContain("Took");
   });
 
   test("worker metrics are hidden while main context/cache and worker costs remain", () => {

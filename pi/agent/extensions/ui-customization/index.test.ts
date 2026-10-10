@@ -529,7 +529,8 @@ describe("ui customization docked lifecycle", () => {
     for (const handler of harness.handlers.get("session_start") ?? [])
       handler({}, first);
     harness.handlers.get("input")![0]!({}, middle);
-    harness.handlers.get("tool_execution_end")![0]!({}, latest);
+    for (const handler of harness.handlers.get("tool_execution_end") ?? [])
+      handler({ toolName: "read", toolCallId: "read", result: {}, isError: false }, latest);
     expect(harness.requests.map((request) => request.cwd)).toEqual([
       "/repo/first",
     ]);

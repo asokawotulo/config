@@ -285,6 +285,105 @@ describe("Fabric sidebar state", () => {
   });
 });
 
+describe("Fabric execution timings", () => {
+  test("retains recorded durations across updates and accepts zero", () => {
+    const state = new FabricSidebarState("session");
+    state.execution("call", { display: { name: "Verify" } }, undefined, "completed", 1_250);
+    state.execution("call", undefined, { phases: ["Done"] }, "completed");
+    expect(state.snapshot().executions[0]).toMatchObject({
+      name: "Verify", status: "completed", phase: "Done", durationMs: 1_250,
+    });
+    state.execution("zero", undefined, undefined, "completed", 0);
+    expect(state.snapshot().executions[0]?.durationMs).toBe(0);
+    for (const duration of [-1, NaN, Infinity]) {
+      state.execution("invalid", undefined, undefined, "failed", duration);
+      expect(state.snapshot().executions[0]?.durationMs).toBeUndefined();
+    }
+  });
+
+  test("hydrates tool results and checkpoints without adding nested timings", () => {
+    const result = entry({
+      id: "result", parentId: "base", type: "message",
+      message: {
+        role: "toolResult", toolName: "fabric_exec", toolCallId: "call",
+        durationMs: 1_250, isError: false,
+        details: { phases: ["Verify"], trace: { operations: [] } },
+        nestedCalls: { calls: [{ name: "read", durationMs: 900 }], complete: true },
+      },
+    });
+    const state = new FabricSidebarState("session");
+    state.hydrate([base, result]);
+    expect(state.snapshot().executions[0]?.durationMs).toBe(1_250);
+    expect(state.snapshot().reportedCost).toBe(0);
+    const saved = entry({
+      id: "saved", parentId: "result", type: "custom",
+      customType: FABRIC_SIDEBAR_ENTRY, data: state.checkpoint("result"),
+    });
+    const restored = new FabricSidebarState("session");
+    restored.hydrate([base, result, saved]);
+    expect(restored.snapshot().executions[0]?.durationMs).toBe(1_250);
+    const legacy = entry({
+      id: "legacy", parentId: "base", type: "message",
+      message: { role: "toolResult", toolName: "fabric_exec", toolCallId: "old", isError: true },
+    });
+    restored.hydrate([base, legacy]);
+    expect(restored.snapshot().executions[0]?.durationMs).toBeUndefined();
+    expect(restored.snapshot().executions[0]?.status).toBe("failed");
+  });
+
+  test("captures native completion events, ignores nested executions, and restores timing", async () => {
+    const h = harness();
+    await h.emit("session_start");
+    await h.emit("tool_execution_start", {
+      toolName: "fabric_exec", toolCallId: "call", args: { display: { name: "Verify" } },
+    });
+    await h.emit("tool_execution_start", {
+      toolName: "fabric_exec", toolCallId: "call/1", parentToolCallId: "call", args: {},
+    });
+    await h.emit("tool_execution_update", {
+      toolName: "fabric_exec", toolCallId: "call/1", parentToolCallId: "call",
+      args: {}, partialResult: { details: {} },
+    });
+    await h.emit("tool_execution_end", {
+      toolName: "fabric_exec", toolCallId: "call/1", parentToolCallId: "call",
+      result: {}, isError: false, durationMs: 900,
+    });
+    await h.emit("tool_execution_end", {
+      toolName: "read", toolCallId: "read", result: {}, isError: false, durationMs: 900,
+    });
+    const completed = {
+      toolName: "fabric_exec", toolCallId: "call",
+      result: { details: { phases: ["Verify"] } }, isError: false, durationMs: 1_250,
+    };
+    await h.emit("tool_execution_end", completed);
+    await h.emit("tool_execution_end", completed);
+    expect(h.bridge.snapshot()?.executions).toHaveLength(1);
+    expect(h.bridge.snapshot()?.executions[0]).toMatchObject({
+      name: "Verify", status: "completed", durationMs: 1_250,
+    });
+    expect(h.sm.getBranch().filter((e) => e.type === "custom")).toHaveLength(1);
+    await h.emit("session_start");
+    expect(h.bridge.snapshot()?.executions[0]?.durationMs).toBe(1_250);
+    await h.emit("session_shutdown");
+  });
+
+  test("captures persisted failed results without a live execution event", async () => {
+    const h = harness();
+    await h.emit("session_start");
+    const message = {
+      role: "toolResult" as const, toolName: "fabric_exec", toolCallId: "failed",
+      content: [], details: { trace: { operations: [] } }, isError: true,
+      durationMs: 0, timestamp: Date.now(),
+    };
+    h.sm.appendMessage(message);
+    await h.emit("message_end", { message });
+    expect(h.bridge.snapshot()?.executions[0]).toMatchObject({ status: "failed", durationMs: 0 });
+    await h.emit("session_start");
+    expect(h.bridge.snapshot()?.executions[0]?.durationMs).toBe(0);
+    await h.emit("session_shutdown");
+  });
+});
+
 describe("Fabric observation bridge", () => {
   test("public component polls local and lineage records and disposes without late writes", async () => {
     const h = harness();

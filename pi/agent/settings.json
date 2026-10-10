@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "1.0.0",
+  "lastChangelogVersion": "1.1.0",
   "theme": "flatland-monokai-improved",
   "tuiMode": "fullscreen",
   "defaultProvider": "openai",
@@ -14,18 +14,13 @@
     "npm:pi-fabric"
   ],
   "extensions": [
-    "-extensions/session-manager/index.ts"
+    "-extensions/session-manager/index.ts",
+    "-extensions/supacode/index.ts"
   ],
   "compaction": {
     "enabled": true
   },
   "hideThinkingBlock": false,
   "deviceId": "d7a0d971-919a-40e2-9b72-ee8b55d35b9a",
-  "defaultTools": [
-    "codemode",
-    "read",
-    "write",
-    "edit",
-    "bash"
-  ]
+  "defaultTools": ["+codemode"]
 }

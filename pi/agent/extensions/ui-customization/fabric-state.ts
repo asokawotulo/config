@@ -62,6 +62,8 @@ export interface FabricExecutionRow {
   name: string;
   status: string;
   phase?: string;
+  /** Recorded wrapper execution time, not worker elapsed time or nested-call totals. */
+  durationMs?: number;
 }
 export interface FabricSidebarSnapshot {
   workers: FabricWorkerRow[];
@@ -240,6 +242,7 @@ export class FabricSidebarState {
     args: unknown,
     details?: unknown,
     status = "running",
+    durationMs?: number,
   ) {
     if (!id(callId)) return;
     const previous = this.executions.get(callId);
@@ -247,10 +250,12 @@ export class FabricSidebarState {
       isRecord(args) && isRecord(args.display) ? args.display : undefined;
     const phases =
       isRecord(details) && Array.isArray(details.phases) ? details.phases : [];
+    const duration = number(durationMs) ?? previous?.durationMs;
     this.executions.set(callId, {
       id: callId,
       name: text(display?.name) ?? previous?.name ?? "Fabric execution",
       status,
+      ...(duration === undefined ? {} : { durationMs: duration }),
       ...((text(phases.at(-1)) ?? previous?.phase)
         ? { phase: text(phases.at(-1)) ?? previous?.phase }
         : {}),
@@ -415,6 +420,7 @@ export class FabricSidebarState {
                 { display: { name: raw.name } },
                 { phases: [raw.phase] },
                 text(raw.status) ?? "completed",
+                number(raw.durationMs),
               );
             }
         }
@@ -428,6 +434,7 @@ export class FabricSidebarState {
           undefined,
           entry.message.details,
           entry.message.isError ? "failed" : "completed",
+          entry.message.durationMs,
         );
         this.ingestDetails(entry.message.details, true);
       } else if (

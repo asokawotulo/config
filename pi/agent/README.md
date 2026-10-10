@@ -1,6 +1,6 @@
 # agent
 
-The shell uses Homebrew Pi. Local Pi libraries are development dependencies for extension typechecking and tests, not the shell's CLI installation.
+The shell uses Homebrew Pi. Local Pi libraries are development dependencies for extension typechecking and tests, not the shell's CLI installation. The brace-expansion override keeps nested copies on Pi 1.1.0's security fix.
 
 ## Development
 
@@ -13,6 +13,14 @@ bun test
 ```
 
 `settings.json` selects the main model, thinking level, theme, fullscreen UI, and compaction behavior. It loads Fabric and FFF as Pi packages. The local session manager and Supacode-managed extension are excluded. `pi update --extensions` reconciles the configured packages. Pi supplies host peers to packages rather than installing duplicate Pi libraries under `npm/`.
+
+## Tool workflow
+
+Use `/skill:tool-workflow` for bounded codemode batches, large-result filtering, and recovery after a partially applied edit batch. The skill is also available for automatic discovery. Worker role files request it, but callers must apply those roles explicitly.
+
+For an opt-in medium-thinking trial on extraction or drafting, start a new task with `pi --thinking medium`. Keep high thinking for security review, migration decisions, and integration debugging. Compare correctness, follow-up fixes, recorded cost, and completion time before changing defaults or trying another provider.
+
+Supacode 0.10.8 uses an older embedded libghostty with OSC 3008 patches. Keep the Supacode integration and leave `PI_PROGRAM_STATUS` unset until its embedded terminal and UI support OSC 7501.
 
 ## Fabric
 
@@ -39,7 +47,7 @@ Add servers with `pi mcp add`, then check them with `pi mcp list`. Add their exa
 - `ask-user`: native questionnaires.
 - `firecrawl`: web search/scraping and shared cache, classified as Fabric network operations.
 - `session-manager`: temporarily disabled while trying Pi's native `/resume` selector. Its custom deletion gestures and implementation remain intact.
-- `supacode-integration`: user-owned presence and notifications. The app-managed `supacode/index.ts` is excluded so it cannot send duplicate events.
+- `supacode-integration`: user-owned presence and notifications. Cancelled runs reset presence without sending completion alerts. The app-managed `supacode/index.ts` is excluded so it cannot send duplicate events.
 - `ui-customization`: session metadata, Fabric worker activity, and deduplicated Main/Subagent costs. Incomplete coverage is labeled Reported.
 - `custom-markdown-code-blocks`: response diff fences and shared side-by-side rendering.
 - `@ff-labs/pi-fff`: search overrides and file completion.

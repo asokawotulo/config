@@ -19,7 +19,7 @@
  *   Pi agent_start      -> busy
  *   Pi ui_prompt_start  -> idle while Pi waits for the user
  *   Pi ui_prompt_end    -> busy when agent work resumes
- *   Pi agent_settled    -> idle + notification with last_assistant_message
+ *   Pi agent_settled    -> idle; non-aborted runs notify with last_assistant_message
  *   Pi session_shutdown -> session_end + idle (defensive activity reset)
  */
 
@@ -161,12 +161,12 @@ export default function (pi: ExtensionAPI) {
     if (transition.presence) emitPresence(transition.presence);
   });
 
-  pi.on("agent_settled", (_event, ctx) => {
+  pi.on("agent_settled", (event, ctx) => {
     waitingForUser = false;
     // Atomic state-set: `idle` overwrites whatever was running on the
     // Supacode side only after retries and queued continuations have settled.
     emitPresence("idle");
-    emitNotification({ body: lastAssistantText(ctx) });
+    if (!event.aborted) emitNotification({ body: lastAssistantText(ctx) });
   });
 
   pi.on("session_shutdown", (_event, _ctx) => {

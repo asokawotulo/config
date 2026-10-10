@@ -57,6 +57,7 @@ class TestTerminal implements Terminal {
   clearScreen(): void {}
   setTitle(): void {}
   setProgress(): void {}
+  setProgramStatus(): void {}
 }
 
 interface RuntimeStack {

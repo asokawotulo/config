@@ -143,15 +143,28 @@ export function registerFabricSidebar(pi: ExtensionAPI, changed: () => void) {
     changed();
   });
   pi.on("tool_execution_start", (event, ctx) => {
-    if (event.toolName !== "fabric_exec" || !state) return;
+    if (event.toolName !== "fabric_exec" || event.parentToolCallId || !state) return;
     current = ctx;
     state.execution(event.toolCallId, event.args);
     changed();
   });
   pi.on("tool_execution_update", (event) => {
-    if (event.toolName !== "fabric_exec" || !state) return;
+    if (event.toolName !== "fabric_exec" || event.parentToolCallId || !state) return;
     state.execution(event.toolCallId, event.args, event.partialResult.details);
     state.ingestDetails(event.partialResult.details);
+    changed();
+  });
+  pi.on("tool_execution_end", (event, ctx) => {
+    if (event.toolName !== "fabric_exec" || event.parentToolCallId || !state) return;
+    current = ctx;
+    state.execution(
+      event.toolCallId,
+      undefined,
+      event.result?.details,
+      event.isError ? "failed" : "completed",
+      event.durationMs,
+    );
+    persist(true);
     changed();
   });
   pi.on("tool_result", (event, ctx) => {
@@ -182,6 +195,7 @@ export function registerFabricSidebar(pi: ExtensionAPI, changed: () => void) {
       undefined,
       event.message.details,
       event.message.isError ? "failed" : "completed",
+      event.message.durationMs,
     );
     state.ingestDetails(event.message.details);
     persist(true);

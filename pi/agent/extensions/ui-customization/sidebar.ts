@@ -51,6 +51,14 @@ function formatCost(cost: number): string {
   return `$${(Number.isFinite(cost) && cost >= 0 ? cost : 0).toFixed(3)}`;
 }
 
+function formatToolDuration(durationMs: number | undefined): string {
+  if (durationMs === undefined || !Number.isFinite(durationMs) || durationMs < 0)
+    return "?";
+  return durationMs < 1_000
+    ? `${Math.round(durationMs)}ms`
+    : `${(durationMs / 1_000).toFixed(2)}s`;
+}
+
 function cacheHitRateRows(rate: number | null): SidebarRow[] {
   if (rate === null || !Number.isFinite(rate)) return [];
   return [
@@ -179,10 +187,14 @@ function fabricRows(metadata: SidebarMetadata, compact = false): SidebarRow[] {
     fabric.executions[0];
   if (!compact && execution) {
     rows.push({ text: execution.name });
-    if (execution.phase)
+    rows.push({
+      text: `${execution.status}${execution.phase ? ` · ${execution.phase}` : ""}`,
+      color: activityAppearance(execution.status).color,
+      optionalPriority: 25,
+    });
+    if (execution.status !== "running")
       rows.push({
-        text: `${execution.status} · ${execution.phase}`,
-        color: activityAppearance(execution.status).color,
+        text: `Took ${formatToolDuration(execution.durationMs)}`,
         optionalPriority: 25,
       });
   }

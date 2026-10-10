@@ -30,6 +30,8 @@ The `asoka.fabric-sidebar` component in `fabric.json` reads `agents.self` and lo
 
 The sidebar shows execution names and observed phases, worker status and current tool, elapsed time, actual model/thinking, calls/turns and actor ownership. Worker token/cache rows are omitted. A TODO in `fabricWorkerRows` reserves genuine context usage and latest-prompt cache hit rate for a future reliable data source; cumulative run counters remain in state for accounting. Parent links indent recursive workers. Idle actor queues, peer sessions and full transcripts remain in `/fabric`; the sidebar stays read-only.
 
+Completed Fabric executions show Pi's recorded wrapper duration as Took. The duration comes from native execution events and persisted tool results, survives checkpoints and resume, and stays separate from worker elapsed time. Legacy results without a duration show Took ?. Nested timings are not added to the wrapper duration.
+
 Terminal provider results are captured before audit trimming. Bounded, metadata-only `asoka.fabric-sidebar.v1` custom entries preserve worker/cost state without adding model context. Checkpoints bind to their exact active-branch boundary; `/tree` reconstructs that branch and does not reimport older off-branch registry runs. Restored unfinished workers are marked stale until observed live. Poll snapshots save at most every 30 seconds, with immediate saves for terminal results and shutdown. Limits are 128 worker records, 12 executions and 256 KiB per checkpoint; exceeded limits mark coverage incomplete.
 
 Fabric owns worker cost accounting. There is no special accounting or replay support for historical dynamic-workflow results.
